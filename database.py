@@ -1,5 +1,8 @@
 import pyodbc
 import winrm    #библиотека для работы с WinRM - протоколом удаленного управления Windows
+import os
+import stat
+from datetime import datetime
 
 # подключение к бд
 driver = '{ODBC Driver 17 for SQL Server}'
@@ -27,7 +30,15 @@ def get_clients_page(request, page: int = 1, page_size: int = 4000):
     try:
         connection = get_user_connection(request)
         if not connection:
+            print("Нет соединения с БД")
             return []
+
+        user = request.session.get("user")
+        if not user:
+            print("Нет пользователя в сессии")
+            return []
+        otd = user.get("otd")
+
         cursor = connection.cursor()  # курсор для выполнения sql запросов
 
         # Рассчитываем offset (колво строк которые будем пропускать)
@@ -43,17 +54,17 @@ def get_clients_page(request, page: int = 1, page_size: int = 4000):
                 dog.predmet as 'Предмет договора'
             FROM dog 
             left join klint on dog.klient = klint.id
+            WHERE dog.kodpodr = ?
             ORDER BY dog.id
-            OFFSET {offset} ROWS
-            FETCH NEXT {page_size} ROWS ONLY
-        """)
+            OFFSET ? ROWS
+            FETCH NEXT ? ROWS ONLY
+        """, otd, offset, page_size)
 
         columns = [column[0] for column in cursor.description]  # получение названия заголовков
         result = []  # создание списка
 
         for row in cursor.fetchall():  # fetchall - берет все строки. fetchone - получение первой строки
-            row_dict = dict(zip(columns,
-                                row))  # zip(columns, row) получает сначала строку с заголовками, потом строку с его значением и соединяет их, а dict преобразует каждую такую строку в словарь типа  {'ID договора': 8001, '№ контрагента': '123', 'Дата начала': '2023-01-01', ...},
+            row_dict = dict(zip(columns, row))  # zip(columns, row) получает сначала строку с заголовками, потом строку с его значением и соединяет их, а dict преобразует каждую такую строку в словарь типа  {'ID договора': 8001, '№ контрагента': '123', 'Дата начала': '2023-01-01', ...},
             result.append(row_dict)  # заносит результат в список
 
         cursor.close()
@@ -71,6 +82,11 @@ def get_contract_id(request, contract_id: int):
         connection = get_user_connection(request)
         if not connection:
             return []
+
+        user = request.session.get("user")
+        if not user:
+            return []
+        otd = user.get("otd")
         cursor = connection.cursor()
         cursor.execute("""
             select 
@@ -117,13 +133,23 @@ def get_contract_id(request, contract_id: int):
                 dog.opl as 'Оплачено',
                 dog.eis as 'Публикация в ЕИС',
                 dog_status.name_st as 'СТАТУС',
-                dog.d_end as 'Дата заверш. договора'
+                dog.d_end as 'Дата заверш. договора',
+                
+                dog_okz.s_dog_okz as 'Сумма договора ОКЗ',
+                dog_okz.s_ds as 'Сумма с ДС',
+                dog_okz.date_izv as 'Дата извещения', 
+                
+                dog_okz.agent as 'Агентский договор',
+                dog_okz.smsp as 'Закупка среди СМСП',
+                dog_okz.d_work as 'Рабочая дата',
+                dog.predlog_txt as '№ предложения'
+                
             from dog 
             left join klint on dog.klient = klint.id
             left join dog_okz on dog.id = dog_okz.id_dog
             inner join dog_status on dog.statusD  = dog_status.id_status
-            where dog.id = ?
-        """, contract_id)
+            WHERE dog.id = ? AND dog.kodpodr = ?
+        """, contract_id, otd)
 
         columns = [column[0] for column in cursor.description]
         row = cursor.fetchone()  # получение строки
@@ -146,9 +172,15 @@ def get_total_count(request):
         connection = get_user_connection(request)
         if not connection:
             return []
+
+        user = request.session.get("user")  # получаем пользователя
+        if not user:
+            return 0
+        otd = user.get("otd")
+
         cursor = connection.cursor()
 
-        cursor.execute("SELECT COUNT(*) FROM dog")  # подсчет количества строк в таблице
+        cursor.execute("SELECT COUNT(*) FROM dog WHERE kodpodr = ?", otd)  # подсчет количества строк в таблице
         count = cursor.fetchone()[0]  # выводит первой строк - цифры количества строк
 
         cursor.close()
@@ -162,13 +194,20 @@ def get_total_count(request):
 # обновление полей и чекбоксов
 def update_par(request, contract_id: int, konk: int, prol: int, beznds: int, opl: int, eis: int, statusD: int,
                d_end: str, sposobzak: str, VIdZAK: int, numzak: str, predlog: int, dat_docosznak: str,
-               num_docosnzak: int, smsp: int, OSTNEKONZAK: int, okpd2: int, subectzak: int, num_z: str, num_z_el: str,
-               pr_z: int, pr_z_osn: str, gpz: str, uid: str, ppz: str):
+               num_docosnzak: int, smsp: str, OSTNEKONZAK: str, okpd2: str, subectzak: int, num_z: str, num_z_el: str,
+               pr_z: int, pr_z_osn: str, gpz: str, uid: str, ppz: str, s_dog_okz: int, s_ds: int, date_izv: str, agent: int, smsp_okz: int, d_work: str, predlog_txt: str):
     try:
         connection = get_user_connection(request)
         if not connection:
             return []
         cursor = connection.cursor()
+
+        user = request.session.get("user")
+        user_otd = user.get("otd")
+        cursor.execute("SELECT kodpodr FROM dog WHERE id = ?", contract_id)
+        row = cursor.fetchone()
+        if not row or row[0] != user_otd:
+            return False  # договор чужой — не обновляем
 
         cursor.execute("""
             UPDATE dog 
@@ -189,10 +228,14 @@ def update_par(request, contract_id: int, konk: int, prol: int, beznds: int, opl
             smsp = ?,
             OSTNEKONZAK = ?,
             okpd2 = ?,
-            subectzak = ?
+            subectzak = ?,
+            
+
+            predlog_txt = ?
             WHERE id = ?
+            
         """, konk, prol, beznds, opl, eis, statusD, d_end, sposobzak, VIdZAK, numzak, predlog, dat_docosznak,
-                       num_docosnzak, smsp, OSTNEKONZAK, okpd2, subectzak, contract_id)
+                       num_docosnzak, smsp, OSTNEKONZAK, okpd2, subectzak, predlog_txt, contract_id)
 
         cursor.execute("""
             UPDATE dog_okz 
@@ -202,9 +245,15 @@ def update_par(request, contract_id: int, konk: int, prol: int, beznds: int, opl
                 pr_z = ?,
                 pr_z_osn = ?,
                 gpz = ?,
-                ppz = ?
+                ppz = ?,
+                s_dog_okz = ?,
+                s_ds = ?,
+                date_izv = ?,
+                agent = ?,
+                d_work = ?,
+                smsp = ?
             WHERE id_dog = ?
-        """, num_z, num_z_el, uid, pr_z, pr_z_osn, gpz, ppz, contract_id)
+        """, num_z, num_z_el, uid, pr_z, pr_z_osn, gpz, ppz, s_dog_okz, s_ds, date_izv, agent, d_work, smsp_okz, contract_id)
 
         connection.commit()
         cursor.close()
@@ -222,6 +271,11 @@ def search_dog(request, numberdog: str = "", numberkontr: str = ""):
         connection = get_user_connection(request)
         if not connection:
             return []
+
+        user = request.session.get("user")
+        if not user:
+            return []
+        otd = user.get("otd")
         cursor = connection.cursor()
 
         if numberdog and numberkontr:
@@ -237,8 +291,9 @@ def search_dog(request, numberdog: str = "", numberkontr: str = ""):
                 LEFT JOIN klint ON dog.klient = klint.id
                 WHERE dbo.dog_fGetNum(dog.id) = ? 
                   AND dog.n4 LIKE ?
+                  AND dog.kodpodr = ?
                 ORDER BY dog.id
-            """, numberdog, f'%{numberkontr}%')
+            """, numberdog, f'%{numberkontr}%', otd)
 
         elif numberdog:
             cursor.execute("""
@@ -252,8 +307,9 @@ def search_dog(request, numberdog: str = "", numberkontr: str = ""):
                 FROM dog
                 LEFT JOIN klint ON dog.klient = klint.id
                 WHERE dbo.dog_fGetNum(dog.id) = ?
+                AND dog.kodpodr = ?
                 ORDER BY dog.id
-            """, numberdog)
+            """, numberdog, otd)
 
         elif numberkontr:
             cursor.execute("""
@@ -267,8 +323,9 @@ def search_dog(request, numberdog: str = "", numberkontr: str = ""):
                 FROM dog
                 LEFT JOIN klint ON dog.klient = klint.id
                 WHERE n4 like ?
+                AND dog.kodpodr = ?
                 ORDER BY dog.id
-            """, f'%{numberkontr}%')
+            """, f'%{numberkontr}%', otd)
 
         else:
             # Ничего не указано
@@ -316,6 +373,59 @@ def get_dog_payments(request, contract_id: int):
         print(f'Error getting payments: {e}')
         return []
 
+# функция берёт процедуру и вытаскивает результат процедуры (для таблицы оплат из 1C)
+def get_dog_payments1С(request, contract_id: int):
+    try:
+        connection = get_user_connection(request)
+        if not connection:
+            return []
+        cursor = connection.cursor()
+
+        cursor.execute("EXEC dog_opl_l_proc ?", contract_id)
+
+        columns = [column[0] for column in cursor.description]
+        rows = cursor.fetchall()
+
+        payments1C = []
+        for row in rows:
+            payment_dict = dict(zip(columns, row))
+            payments1C.append(payment_dict)
+
+        cursor.close()
+        connection.close()
+        return payments1C
+
+    except Exception as e:
+        print(f'Error getting payments: {e}')
+        return []
+
+# функция берёт процедуру dsproc для третьей таблицы
+def get_ds_data(request, contract_id: int):
+    try:
+        connection = get_user_connection(request)
+        if not connection:
+            return []
+        cursor = connection.cursor()
+
+        cursor.execute("EXEC dsproc ?", contract_id)
+
+        columns = [column[0] for column in cursor.description]
+        rows = cursor.fetchall()
+
+        ds_data = []
+        for row in rows:
+            row_dict = dict(zip(columns, row))
+            ds_data.append(row_dict)
+
+        cursor.close()
+        connection.close()
+        return ds_data
+
+    except Exception as e:
+        print(f'Error getting ds data: {e}')
+        return []
+
+
 #проверка логина и пароля, выполнение команды на удаленном компе и возвращения true/false в результате, показывая подключилось или нет
 def verify_windows_login(host, username, password):
     try:
@@ -323,8 +433,8 @@ def verify_windows_login(host, username, password):
         session = winrm.Session(
             f'http://{host}:5985/wsman', #стандартный HTTP порт (5985) для управравления удаленным виндовс компом
             auth=(username, password),
-            transport='ntlm'   #протокол
-        )
+            transport='ntlm'  #протокол
+       )
         #пробуем выполнить команду 'hostname' для проверки - команда получения имени компьютера
         result = session.run_cmd('hostname')
 
@@ -344,14 +454,57 @@ def verify_windows_login(host, username, password):
         print(f"Ошибка подключения для {username}: {e}")
         return False
 
+
 #функция получения отдела зашедшего пользователя для того чтобы вывести только те договора которые относятся к его отделу
 def get_user_otd(username: str):
     try:
         conn = pyodbc.connect(connection_string)
         cursor = conn.cursor()
-        cursor.execute("SELECT otd FROM dog_ident WHERE login = ?", username)
+        cursor.execute("SELECT otd FROM dog_ident WHERE im_user = ?", username)
         row = cursor.fetchone()
+        print(f"отдел из БД: {row[0] if row else None}")
         conn.close()
         return row[0] if row else None
+
     except:
         return None
+
+# функция добавления оплаты в таблицу
+def add_dog_payment(request, contract_id: int, summa: float, date: str):
+    try:
+        connection = get_user_connection(request)
+        cursor = connection.cursor()
+
+        cursor.execute("""
+            INSERT INTO dog_opl (id_dog, s_opl, d_opl)
+            VALUES (?, ?, ?)
+        """, contract_id, summa, date)
+
+        connection.commit()
+        cursor.close()
+        connection.close()
+        return True
+    except Exception as e:
+        print(f'Error adding payment: {e}')
+        return False
+
+#функция удаления оплаты из таблицы
+def delete_dog_payments(request, payment_ids: list):
+    try:
+        connection = get_user_connection(request)
+        cursor = connection.cursor()
+
+        placeholders = ','.join(['?'] * len(payment_ids))
+
+        cursor.execute(f"""
+            DELETE FROM dog_opl 
+            WHERE id_opl IN ({placeholders})
+        """, *payment_ids)
+
+        connection.commit()
+        cursor.close()
+        connection.close()
+        return True
+    except Exception as e:
+        print(f'Error deleting payments: {e}')
+        return False
