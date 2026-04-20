@@ -2,7 +2,8 @@ import pyodbc
 import winrm
 import os
 from datetime import datetime
-
+import platform
+CONTRACTS_BASE_PATH = os.environ.get('CONTRACTS_PATH', '/mnt/oblgaz/system/contracts_archive')
 pyodbc.pooling = True
 
 # подключение к бд
@@ -203,7 +204,7 @@ def get_total_count(request):
 def update_par(request, contract_id: int, konk: int, prol: int, beznds: int, opl: int, eis: int, statusD: int,
                d_end: str, sposobzak: str, VIdZAK: int, numzak: str, predlog: int, dat_docosznak: str,
                num_docosnzak: int, smsp: str, OSTNEKONZAK: str, okpd2: str, subectzak: int, num_z: str, num_z_el: str,
-               pr_z: int, pr_z_osn: str, gpz: str, uid: str, ppz: str, s_dog_okz: int, s_ds: int, date_izv: str, agent: int, smsp_okz: int, d_work: str, predlog_txt: str):
+               pr_z: int, pr_z_osn: str, gpz: str, uid: str, ppz: str, s_dog_okz: int, s_ds: int, date_izv: str, agent: int, smsp_okz: int, d_work: str, predlog_txt: str, publ: int = 0, publ_d: str = ''):
     try:
         connection = get_user_connection(request)
         if not connection:
@@ -259,9 +260,11 @@ def update_par(request, contract_id: int, konk: int, prol: int, beznds: int, opl
                 date_izv = ?,
                 agent = ?,
                 d_work = ?,
-                smsp = ?
+                smsp = ?,
+                publ = ?,
+                publ_d = ?
             WHERE id_dog = ?
-        """, num_z, num_z_el, uid, pr_z, pr_z_osn, gpz, ppz, s_dog_okz, s_ds, date_izv, agent, d_work, smsp_okz, contract_id)
+        """, num_z, num_z_el, uid, pr_z, pr_z_osn, gpz, ppz, s_dog_okz, s_ds, date_izv, agent, d_work, smsp_okz, contract_id, publ, publ_d)
 
         connection.commit()
         cursor.close()
@@ -500,8 +503,6 @@ def get_dog_payments1С(request, contract_id: int):
         print(f'Error getting payments: {e}')
         return []
 
-
-
 #проверка логина и пароля, выполнение команды на удаленном компе и возвращения true/false в результате, показывая подключилось или нет
 def verify_windows_login(host, username, password):
     try:
@@ -597,9 +598,8 @@ def get_contract_files(request, contract_num: str):
     try:
         print(f"=== get_contract_files для договора {contract_num} ===")
 
-        # Путь к папке с файлами
-        base_path = '/mnt/oblgaz/system/contracts_archive/'
-        contract_folder = base_path + '/' + str(contract_num)
+        base_path = CONTRACTS_BASE_PATH
+        contract_folder = os.path.join(base_path, str(contract_num))
 
         print(f"Ищем папку: {contract_folder}")
 

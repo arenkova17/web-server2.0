@@ -135,7 +135,6 @@ async def login_post(request: Request):
         </html>
         """)
 
-
 # окно ввода логина и пароля
 @app.get("/login", response_class=HTMLResponse)
 def login_page():
@@ -392,7 +391,7 @@ def home(request: Request, page: int = 1, page_size: int = 4000):
         html += "</tr>"
         for contract in contracts:  # проход по строчкам договоров
             contract_id = contract['ID договора']  # присваиваем id переменной
-            html += f"<tr ondblclick='showContract({contract_id}, {page})'>"  # делаем строчку кликабельной
+            html += f"<tr onclick='showContract({contract_id}, {page})'>"  # делаем строчку кликабельной
             for value in contract.values():  # проход по значениям одной строчки договора + оформление
                 html += f"<td style='padding: 5px; border: 1px solid #ddd;'>{value}</td>"
             html += "</tr>"
@@ -754,6 +753,19 @@ def contract_page(request: Request, contract_id: int, from_page: str = "1"):
     gpz_value = contract.get('ГПЗ', '')
     uid_value = contract.get('UID', '')
     ppz_value = contract.get('ППЗ', '')
+    # Преобразуем код stz в название
+    stz_value = contract.get('stz', '0')
+    stz_dict = {
+        '0': 'не указан',
+        '1': 'БДР',
+        '2': 'Инвестиции',
+        '3': 'Прочее',
+        '4': 'В рамках агентского'
+    }
+    stz_name = stz_dict.get(str(stz_value), 'не указан')
+    publ_value = contract.get('Публикация', 0)
+    publ_checked = 'checked' if publ_value == 1 else ''
+    publ_d_value = contract.get('Дата публикации', '')
 
     prol_value = contract.get('Пролонгация', 0)
     prol_checked = 'checked' if prol_value == 1 else ''
@@ -953,10 +965,42 @@ def contract_page(request: Request, contract_id: int, from_page: str = "1"):
                 <div><label><strong>ППЗ:</strong></label>
                 <input type="text" id="ppz" value="{ppz_value}" size="15"></div>
             </div>
+            
+            <div style="display: flex; gap: 25px;">
+                <div style="display: flex; gap: 5px; align-items: center; margin-bottom: 5px; size="20"">
+                    <label for="stz_value"><strong>Статьи затрат:</strong></label>
+                    <input type="text" id="stz_value" value="{stz_name}" readonly style=" cursor: default;">
+                </div>
+                
+                <div style="display: flex; gap: 30px; align-items: center; margin-bottom: 5px;">
+                    <div>
+                        <input type="checkbox" id="publ_checkbox" {publ_checked}>
+                        <label for="publ_checkbox"><strong>Опубликовано</strong></label>
+                    </div>
+                    <div id="publ_date_div" style="display: {'block' if publ_value == 1 else 'none'};">
+                        <label><strong>Дата публикации</strong></label>
+                        <input type="date" id="publ_date" value="{publ_d_value}">
+                    </div>
+                </div>
+            </div>
         </div>
         <!--КОНЕЦ НИЖЕ КОНТРАГЕНТА------------------>
         </div>     <!-- закрытие левого столбца-->
-
+        
+        <script>
+        // Показать/скрыть поле даты публикации
+        const publCheckbox = document.getElementById('publ_checkbox');
+        const publDateDiv = document.getElementById('publ_date_div');
+        
+        if (publCheckbox) {{
+            publCheckbox.addEventListener('change', function() {{
+                if (publDateDiv) {{
+                    publDateDiv.style.display = this.checked ? 'block' : 'none';
+                }}
+            }});
+        }}
+        </script>
+        
         <div>       <!-- открытие правого столбца -->
         <!-- СВЕРХУ СПРАВА-----------------> 
         <div style="">
@@ -1688,7 +1732,7 @@ def contract_page(request: Request, contract_id: int, from_page: str = "1"):
     html += f"""
 
         <!-- ДВЕ КНОПКИ -->
-        <div style="display: flex; width: 97%; justify-content: space-between; position: fixed; bottom: 20px;">
+        <div style="display: flex; width: 97%; justify-content: space-between; position: fixed; align-items: center; bottom: 20px;">
             <div>
                 <a href="{back_url}" class="button-back">Назад к списку</a>
             </div> 
@@ -1740,7 +1784,8 @@ def contract_page(request: Request, contract_id: int, from_page: str = "1"):
             smsp_okz: document.getElementById('smsp_okz').checked ? 1 : 0,
             d_work: document.getElementById('d_work').value,
             predlog_txt: document.getElementById('predlog_txt').value
-
+            publ: document.getElementById('publ_checkbox').checked ? 1 : 0,
+            publ_d: document.getElementById('publ_date').value
         }};
         console.log('Данные для отправки:', data);
 
@@ -1850,6 +1895,8 @@ async def update_contract_api(contract_id: int, request: Request):
         smsp_okz = data.get('smsp_okz', 0)
         d_work = data.get('d_work', '')
         predlog_txt = data.get('predlog_txt', '')
+        publ = data.get('publ', 0)
+        publ_d = data.get('publ_d', '')
 
         success = update_par(
             request,
@@ -1889,7 +1936,10 @@ async def update_contract_api(contract_id: int, request: Request):
             agent=agent,
             smsp_okz=smsp_okz,
             d_work=d_work,
-            predlog_txt=predlog_txt
+            predlog_txt=predlog_txt,
+
+            publ=publ,
+            publ_d=publ_d
         )
 
         if success:
@@ -2015,7 +2065,7 @@ async def publish_file(contract_id: int, request: Request):
     try:
         data = await request.json()
         file_path = data.get('file_path')
-        publish = data.get('publish', True)  # True - опубликовать, False - отменить
+        publish = data.get('publish', True)
         date_publ = data.get('date_publ', datetime.now().strftime('%Y%m%d'))
 
         # Получаем подключение к БД
@@ -2170,4 +2220,10 @@ async def update_azec_ds(request: Request):
         return {"success": False, "message": str(e)}
 
 if __name__ == '__main__':
-    uvicorn.run("main:app", host="0.0.0.0", port=8000)  # ip aдрес моего компьютера 192.168.1.228, по умолчанию 127.0.0.1, http://192.168.1.228:8000
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8001,
+        ssl_keyfile="key.pem",
+        ssl_certfile="cert.pem"
+    )  # ip aдрес моего компьютера 192.168.1.228, по умолчанию 127.0.0.1, https://192.168.1.228:8001
