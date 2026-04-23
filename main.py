@@ -58,7 +58,6 @@ app.add_middleware(
     https_only=False
 )
 
-
 # обработчик отправки логина и пароля
 @app.post("/login")
 async def login_post(request: Request):
@@ -72,7 +71,7 @@ async def login_post(request: Request):
         id_user = get_user_id(username)
         request.session["user"] = {"login": username, "otd": otd, "id_user": id_user}  # запомниает логин пользователя
         print(f"otd из функции: {otd}")
-        return RedirectResponse("/", status_code=303)  # и отправляет чувака на главную с таблицу
+        return RedirectResponse("/choose", status_code=303)  # и отправляет чувака на главную с таблицу
     else:  # если не входит чувак то по новой ввод л/п
         return HTMLResponse(content="""
         <!DOCTYPE html>
@@ -290,7 +289,6 @@ def home(request: Request, page: int = 1, page_size: int = 4000):
         border: none;
         cursor: pointer;
         font-size: 16px;
-        position: absolute; top: 14px; right: 20px;
         border-radius: 4px;
     }
     .button-in-window {
@@ -309,20 +307,37 @@ def home(request: Request, page: int = 1, page_size: int = 4000):
         cursor: pointer;
         font-size: 16px;
         padding: 10px 20px;
-        position: absolute; top: 14px; right: 180px;
         text-decoration: none;
         border-radius: 4px;
+    }
+    .button-switch {
+        background-color: #28a745;
+        color: white;
+        border: none;
+        cursor: pointer;
+        font-size: 16px;
+        padding: 8px 16px;
+        border-radius: 4px;
+        text-decoration: none;
+        transition: background 0.2s;
+    }
+    .button-switch:hover {
+        background-color: #218838;
     }
     </style>
     </head>
     """
     html += f"""
     <body>
-        <h1 class="h1">Список договоров подлежащих публикации в ЕИС</h1>
-        <div style="display: flex; gap: 15px;">
-            <button class="button-exit" onclick="logout()">Выйти</button>
-            <button class="button-searchdog" onclick="opendialogwindow()" >Найти договор</button>
+        <div style="background: #e4f0fb; padding: 8px 15px; display: flex; justify-content: space-between; align-items: center;">
+            <h1 style="margin: 0; color: #0952a0; font-size: 28px;">Список договоров подлежащих публикации в ЕИС</h1>
+            <div style="display: flex; gap: 12px;">
+                <button class="button-searchdog" onclick="opendialogwindow()">Найти договор</button>
+                <button class="button-switch" onclick="goToChoose()">Сменить программу</button>
+                <button class="button-exit" onclick="logout()">Выйти</button>
+            </div>
         </div>
+        
         <div style="font-size: 15px; color: #666; margin-bottom: 5px;">
             Всего договоров: <strong>{total_count}</strong>
         </div>
@@ -468,6 +483,10 @@ def home(request: Request, page: int = 1, page_size: int = 4000):
 
     function logout() {
         window.location.href = '/logout';
+    }
+    
+    function goToChoose() {
+        window.location.href = '/choose';
     }
     </script>
 
@@ -2243,6 +2262,107 @@ async def update_azec_ds(request: Request):
     except Exception as e:
         (f"Error in save_ds: {e}")
         return {"success": False, "message": str(e)}
+
+#страница выбора программы
+@app.get("/choose", response_class=HTMLResponse)
+def choose_page(request: Request):
+    user = request.session.get("user")
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    username = user.get("login", "Пользователь")
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Выбор программы</title>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                margin: 0;
+                background: #f0f2f5;
+            }}
+            .container {{
+                text-align: center;
+                background: white;
+                padding: 40px;
+                border-radius: 10px;
+                box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            }}
+            h1 {{
+                color: #0952a0;
+                margin-bottom: 10px;
+            }}
+            .welcome {{
+                color: #666;
+                margin-bottom: 30px;
+                font-size: 16px;
+            }}
+            .buttons {{
+                display: flex;
+                gap: 30px;
+                justify-content: center;
+            }}
+            .btn {{
+                background: #1073b7;
+                color: white;
+                border: none;
+                padding: 15px 30px;
+                font-size: 18px;
+                border-radius: 5px;
+                cursor: pointer;
+                text-decoration: none;
+                display: inline-block;
+            }}
+            .btn:hover {{
+                background: #0952a0;
+            }}
+            .btn-secondary {{
+                background: #6c757d;
+            }}
+            .btn-secondary:hover {{
+                background: #5a6268;
+            }}
+            .logout {{
+                margin-top: 30px;
+            }}
+            .logout a {{
+                color: #999;
+                text-decoration: none;
+                font-size: 14px;
+            }}
+            .logout a:hover {{
+                color: #666;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Выберите программу</h1>
+            <div class="welcome">Добро пожаловать, <strong>{username}</strong>!</div>
+            <div class="buttons">
+                <a href="/" class="btn">Расходные договоры и закупки</a>
+                <button onclick="showMessage()" class="btn btn-secondary">Другая программа</button>
+            </div>
+            <div class="logout">
+                <a href="/logout">Выйти</a>
+            </div>
+        </div>
+
+        <script>
+            function showMessage() {{
+                alert('Программа в разработке. Скоро будет доступна.');
+            }}
+        </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html)
 
 if __name__ == '__main__':
     uvicorn.run(
