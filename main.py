@@ -33,7 +33,7 @@ app = FastAPI()
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):  # функция выполняется для каждого запроса
         # список путей доступных без авторизации - в нашем случае это только страница входа, иначе бы перед каждым запросом кидал страницу входа
-        public_paths = ["/login", "/logout"]
+        public_paths = ["/login", "/logout", "/choose"]
 
         # если путь не в списке публичных, то проверяем есть ли пользователь в сессии, если да - то проходим, если нет - то отправка на логиниться
         if request.url.path not in public_paths:
@@ -58,6 +58,7 @@ app.add_middleware(
     https_only=False
 )
 
+
 # обработчик отправки логина и пароля
 @app.post("/login")
 async def login_post(request: Request):
@@ -79,55 +80,73 @@ async def login_post(request: Request):
         <head>
             <title>Вход в систему</title>
             <style>
-                body { 
-                    font-family: Arial; 
-                    display: flex; 
-                    justify-content: center; 
-                    align-items: center; 
-                    height: 100vh; 
-                    margin: 0; 
+                .login-body {
+                    font-family: Arial;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    height: 100vh;
+                    margin: 0;
                 }
-                .login-form { 
-                    border: 2px solid #1073b7; 
-                    padding: 30px; 
-                    border-radius: 10px; 
-                    width: 300px; 
+                .login-form {
+                    border: 2px solid #1073b7;
+                    padding: 30px;
+                    border-radius: 10px;
+                    width: 300px;
                 }
-                input { 
-                    width: 100%; 
-                    padding: 8px; 
-                    margin: 10px 0; 
+                .login-input {
+                    width: 100%;
+                    padding: 8px;
+                    margin: 10px 0;
+                    box-sizing: border-box;
                 }
-                button { 
-                    background: #1073b7; 
-                    color: white; 
-                    border: none; 
-                    padding: 10px; 
-                    width: 100%; 
+                .login-button {
+                    background: #1073b7;
+                    color: white;
+                    border: none;
+                    padding: 10px;
+                    width: 60%;
                     cursor: pointer;
-                    border-radius: 4px;`
+                    margin-top: 10px;
+                    border-radius: 4px;
+                    display: block;
+                    margin-left: auto;
+                    margin-right: auto;
                 }
-                .error { 
-                    color: red; 
-                    margin-top: 
-                    10px; 
-                    text-align: center; 
+                .login-error {
+                    color: red;
+                    margin-top: 10px;
+                    text-align: center;
+                }
+                #seepassword {
+                    position: absolute;
+                    right: 10px;
+                    top: 50%;
+                    transform: translateY(-50%);
+                    cursor: pointer;
+                    font-size: 12px;
+                    background: white;
+                    padding: 0 5px;
+                }
+                .h2 {
+                    text-align: center;
+                    color: #0952a0;
                 }
             </style>
         </head>
 
-        <body>
+        <body class="login-body">
             <div class="login-form">
-                <h2 style="color: #0952a0;">Вход в систему</h2>
+                <h2 class="h2">Вход в систему</h2>
                 <form method="post" action="/login">
-                    <input type="text" name="username" placeholder="Логин" required style="width: 100%; padding: 8px; margin: 10px 0; box-sizing: border-box;">
+                    <input class="login-input" type="text" name="username" placeholder="Логин" required>
                     <div style="position: relative; width: 100%;">
-                        <input type="password" name="password" id="password" placeholder="Пароль" required style="width: 100%; padding: 8px; margin: 10px 0; padding-right: 40px; box-sizing: border-box;">
-                        <span onclick="togglePassword()" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; font-size: 12px; background: white; padding: 0 5px;">Показать</span>
+                        <input class="login-input" type="password" name="password" id="password" placeholder="Пароль" required>
+                        <span onclick="togglePassword()" id="seepassword">Показать</span>
                     </div>
-                    <button type="submit" style="border-radius: 4px; width: 100%; padding: 10px; margin-top: 10px;">Войти</button>
+                    <button class="login-button" type="submit">Войти</button>
                 </form>
-                <p class="error">Неверный логин или пароль</p>
+                <p class="login-error">Неверный логин или пароль</p>
             </div>
 
             <script>
@@ -140,7 +159,6 @@ async def login_post(request: Request):
         </html>
         """)
 
-
 # окно ввода логина и пароля
 @app.get("/login", response_class=HTMLResponse)
 def login_page():
@@ -149,45 +167,65 @@ def login_page():
     <head>
         <title>Вход в систему</title>
         <style>
-            body {        
-                font-family: Arial; 
-                display: flex; 
-                justify-content: center; 
-                align-items: center; 
+            .login-body {
+                font-family: Arial;
+                display: flex;
+                justify-content: center;
+                align-items: center;
                 height: 100vh;
             }
-            .login-form {      /* рамка */  
-                border: 2px solid #1073b7; 
-                padding: 30px; 
-                border-radius: 10px; 
-                width: 300px; 
+            .login-form {      /* рамка */
+                border: 2px solid #1073b7;
+                padding: 30px;
+                border-radius: 10px;
+                width: 300px;
             }
-            input {          /* два инпута */
-                width: 100%; 
-                padding: 8px; 
-                margin: 10px 0; 
+            .login-input {
+                width: 100%;
+                padding: 8px;
+                margin: 10px 0;
+                box-sizing: border-box;
             }
-            button {           /* для кнопок */
-                background: #1073b7; 
-                color: white; 
-                border: none; 
-                padding: 10px; 
-                width: 100%; 
-                cursor: pointer; 
+            .login-button {
+                background: #1073b7;
+                color: white;
+                border: none;
+                padding: 10px;
+                width: 60%;
+                cursor: pointer;
+                margin-top: 10px;
+                border-radius: 4px;
+                display: block;
+                margin-left: auto;
+                margin-right: auto;
+            }
+            #seepassword {
+                position: absolute;
+                right: 10px;
+                top: 50%;
+                transform: translateY(-50%);
+                cursor: pointer;
+                font-size: 12px;
+                background: white;
+                padding: 0 5px;
+            }
+            .h2 {
+                text-align: center;
+                color: #0952a0;
             }
         </style>
     </head>
 
-    <body>
+    <body class="login-body">
     <div class="login-form">
-        <h2 style="color: #0952a0;">Вход в систему</h2>
+        <h2 class="h2">Вход в систему</h2>
         <form method="post" action="/login">
-            <input type="text" name="username" placeholder="Логин" required style="width: 100%; padding: 8px; margin: 10px 0;">
+            <input class="login-input" type="text" name="username" placeholder="Логин" required>
             <div style="position: relative;">
-                <input type="password" name="password" id="password" placeholder="Пароль" required style="width: 100%; padding: 8px; margin: 10px 0; padding-right: 40px;">
-                <span onclick="togglePassword()" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; font-size: 12px;">Показать</span>
+                <input class="login-input" type="password" name="password" id="password" placeholder="Пароль" required>
+                <span onclick="togglePassword()" id="seepassword">Показать</span>
             </div>
-            <button type="submit" style="background: #1073b7; color: white; border: none; padding: 10px; width: 100%; cursor: pointer; margin-top: 10px; border-radius: 4px;">Войти</button>
+            <button class="login-button" type="submit">Войти</button>
         </form>
     </div>
 
@@ -203,7 +241,6 @@ def login_page():
         }
     }
     </script>"""
-
 
 @app.get("/logout")
 async def logout(request: Request):
@@ -843,7 +880,7 @@ def contract_page(request: Request, contract_id: int, from_page: str = "1"):
     <html>
     <head><title>Договор {contract_id}</title>
     <style>
-    .button-back {{
+    .button-back-page {{
         background: #1073b7; /* Цвет фона */
         font-size: 18px; /* Размер текста */
         padding: 5px 20px; /* Поля вокруг текста */
@@ -851,7 +888,7 @@ def contract_page(request: Request, contract_id: int, from_page: str = "1"):
         text-decoration: none;
         border-radius: 4px; 
     }}
-    .button-back:hover {{
+    .button-back-page:hover {{
         background: #0952a0;
         border-radius: 4px; 
     }}
@@ -1772,7 +1809,7 @@ def contract_page(request: Request, contract_id: int, from_page: str = "1"):
         <!-- ДВЕ КНОПКИ -->
         <div style="display: flex; width: 97%; justify-content: space-between; position: fixed; align-items: center; bottom: 20px;">
             <div>
-                <a href="{back_url}" class="button-back">Назад к списку</a>
+                <a href="{back_url}" class="button-back-page">Назад к списку</a>
             </div> 
             <div>   
                 <button id="saveButton" onclick="savepar()" class="button-save">Cохранить</button>
@@ -2278,7 +2315,7 @@ def choose_page(request: Request):
     <head>
         <title>Выбор программы</title>
         <style>
-            body {{
+            .choose_body {{
                 font-family: Arial, sans-serif;
                 display: flex;
                 justify-content: center;
@@ -2287,14 +2324,14 @@ def choose_page(request: Request):
                 margin: 0;
                 background: #f0f2f5;
             }}
-            .container {{
+            .choose_container {{
                 text-align: center;
                 background: white;
                 padding: 40px;
                 border-radius: 10px;
                 box-shadow: 0 0 20px rgba(0,0,0,0.1);
             }}
-            h1 {{
+            .choose_h1 {{
                 color: #0952a0;
                 margin-bottom: 10px;
             }}
@@ -2341,9 +2378,9 @@ def choose_page(request: Request):
             }}
         </style>
     </head>
-    <body>
-        <div class="container">
-            <h1>Выберите программу</h1>
+    <body class="choose_body">
+        <div class="choose_container">
+            <h1 style="choose_h1">Выберите программу</h1>
             <div class="welcome">Добро пожаловать, <strong>{username}</strong>!</div>
             <div class="buttons">
                 <a href="/" class="btn">Расходные договоры и закупки</a>
