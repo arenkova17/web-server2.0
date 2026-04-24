@@ -31,7 +31,7 @@ def get_user_connection(request):
 
 
 # функция вывода таблицы почастично ( первые 4000 клиентов. вторые 4000 клиентов и тд)
-def get_clients_page(request, page: int = 1, page_size: int = 4000):
+def get_clients_page(request, page: int = 1, page_size: int = 4000, pub: str = '1'):
     try:
         connection = get_user_connection(request)
         if not connection:
@@ -41,45 +41,51 @@ def get_clients_page(request, page: int = 1, page_size: int = 4000):
         if not user:
             return []
 
-        id_user = user.get("id_user")  # ← берём id_user
+        id_user = user.get("id_user")
 
         cursor = connection.cursor()
         offset = (page - 1) * page_size
 
-        cursor.execute(f"""
+        # Базовый SQL
+        sql = """
             SELECT 
                 dog.id as 'ID договора', 
                 dbo.dog_fGetNum(dog.id) as 'Номер договора',
                 dog.n4 as '№ контрагента',
-                dog.dd as 'Дата договора',
+                CONVERT(varchar, dog.dd, 104) as 'Дата договора',
                 klint.name as 'Контрагент', 
                 dog.predmet as 'Предмет договора'
             FROM dog 
             LEFT JOIN klint ON dog.klient = klint.id
+            LEFT JOIN dog_okz ON dog.id = dog_okz.id_dog
             LEFT JOIN dog_ident ON dog.kodpodr = dog_ident.otd 
                                 OR dog_ident.opt <= 6 
                                 OR dog.n2 = dog_ident.viddog
             WHERE dog.dohod = 3 AND dog_ident.id_user = ?
-            ORDER BY dog.id
-            OFFSET ? ROWS
-            FETCH NEXT ? ROWS ONLY
-        """, id_user, offset, page_size)
+        """
+        params = [id_user]
 
-        columns = [column[0] for column in cursor.description]  # получение названия заголовков
-        result = []  # создание списка
+        if pub == '0':
+            sql += " AND dog_okz.publ = 0 AND dog.eis = 1"
 
-        for row in cursor.fetchall():  # fetchall - берет все строки. fetchone - получение первой строки
-            row_dict = dict(zip(columns, row))  # zip(columns, row) получает сначала строку с заголовками, потом строку с его значением и соединяет их, а dict преобразует каждую такую строку в словарь типа  {'ID договора': 8001, '№ контрагента': '123', 'Дата начала': '2023-01-01', ...},
-            result.append(row_dict)  # заносит результат в список
+        sql += " ORDER BY dog.id OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"
+        params.extend([offset, page_size])
+
+        cursor.execute(sql, params)
+
+        columns = [column[0] for column in cursor.description]
+        result = []
+
+        for row in cursor.fetchall():
+            result.append(dict(zip(columns, row)))
 
         cursor.close()
-        connection.close()  # закрывается соединение
-        return result  # возвращается результат
+        connection.close()
+        return result
 
-    except Exception as e:  # вывод ошибки и пустого списка в случае краха
+    except Exception as e:
         print(f'Error in get_clients_page: {e}')
         return []
-
 
 # функция для добычи одного договора по id, нужна для окошка с инфой клиента
 def get_contract_id(request, contract_id: int):
@@ -177,7 +183,7 @@ def get_contract_id(request, contract_id: int):
 
 
 # считает всех всех клиентов (нужно для просчета количества выводимых клиентов)
-def get_total_count(request):
+def get_total_count(request, pub: str = '1'):
     try:
         connection = get_user_connection(request)
         if not connection:
@@ -189,14 +195,21 @@ def get_total_count(request):
 
         id_user = user.get("id_user")
 
-        cursor = connection.cursor()
-        cursor.execute("""
+        sql = """
             SELECT COUNT(*) FROM dog 
+            LEFT JOIN dog_okz ON dog.id = dog_okz.id_dog
             LEFT JOIN dog_ident ON dog.kodpodr = dog_ident.otd 
                                 OR dog_ident.opt <= 6 
                                 OR dog.n2 = dog_ident.viddog
             WHERE dog.dohod = 3 AND dog_ident.id_user = ?
-        """, id_user)
+        """
+        params = [id_user]
+
+        if pub == '0':
+            sql += " AND dog_okz.publ = 0 AND dog.eis = 1"
+
+        cursor = connection.cursor()
+        cursor.execute(sql, params)
         count = cursor.fetchone()[0]
 
         cursor.close()
@@ -206,7 +219,6 @@ def get_total_count(request):
     except Exception as e:
         print(f'Error in get_total_count: {e}')
         return 0
-
 # обновление полей и чекбоксов
 def update_par(request, contract_id: int, konk: int, prol: int, beznds: int, opl: int, eis: int, statusD: int,
                d_end: str, sposobzak: str, VIdZAK: int, numzak: str, predlog: int, dat_docosznak: str,

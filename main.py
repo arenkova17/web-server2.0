@@ -14,6 +14,7 @@ from datetime import datetime
 import io
 import openpyxl
 from openpyxl.styles import Font
+from fastapi.staticfiles import StaticFiles
 
 os.environ.pop('http_proxy', None)
 os.environ.pop('https_proxy', None)
@@ -29,6 +30,8 @@ os.environ['no_proxy'] = '*'
 # создание веб-приложения
 app = FastAPI()
 
+# Подключаем папку со статическими файлами
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):  # функция выполняется для каждого запроса
@@ -44,7 +47,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         return response
 
-
 # добавляет класс работу каждый раз перед запросом
 app.add_middleware(AuthMiddleware)
 
@@ -57,7 +59,6 @@ app.add_middleware(
     same_site="strict",
     https_only=False
 )
-
 
 # обработчик отправки логина и пароля
 @app.post("/login")
@@ -79,182 +80,79 @@ async def login_post(request: Request):
         <html>
         <head>
             <title>Вход в систему</title>
-            <style>
-                .login-body {
-                    font-family: Arial;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    height: 100vh;
-                    margin: 0;
-                }
-                .login-form {
-                    border: 2px solid #1073b7;
-                    padding: 30px;
-                    border-radius: 10px;
-                    width: 300px;
-                }
-                .login-input {
-                    width: 100%;
-                    padding: 8px;
-                    margin: 10px 0;
-                    box-sizing: border-box;
-                }
-                .login-button {
-                    background: #1073b7;
-                    color: white;
-                    border: none;
-                    padding: 10px;
-                    width: 60%;
-                    cursor: pointer;
-                    margin-top: 10px;
-                    border-radius: 4px;
-                    display: block;
-                    margin-left: auto;
-                    margin-right: auto;
-                }
-                .login-error {
-                    color: red;
-                    margin-top: 10px;
-                    text-align: center;
-                }
-                #seepassword {
-                    position: absolute;
-                    right: 10px;
-                    top: 50%;
-                    transform: translateY(-50%);
-                    cursor: pointer;
-                    font-size: 12px;
-                    background: white;
-                    padding: 0 5px;
-                }
-                .h2 {
-                    text-align: center;
-                    color: #0952a0;
-                }
-            </style>
-        </head>
-
-        <body class="login-body">
-            <div class="login-form">
-                <h2 class="h2">Вход в систему</h2>
-                <form method="post" action="/login">
-                    <input class="login-input" type="text" name="username" placeholder="Логин" required>
-                    <div style="position: relative; width: 100%;">
-                        <input class="login-input" type="password" name="password" id="password" placeholder="Пароль" required>
-                        <span onclick="togglePassword()" id="seepassword">Показать</span>
-                    </div>
-                    <button class="login-button" type="submit">Войти</button>
-                </form>
+            <link rel="stylesheet" href="/static/css/style.css">
+    </head>
+    <body class="login-body">
+        <div class="login-container">
+            <h2 class="login-title">Вход в систему</h2>
+            <form method="post" action="/login">
+                <input class="login-input" type="text" name="username" placeholder="Логин" required>
+                <div class="password-wrapper">
+                    <input class="login-password" type="password" name="password" id="password" placeholder="Пароль" required>
+                    <span onclick="togglePassword()" class="toggle-password">Показать</span>
+                </div>
+                <button class="login-button" type="submit">Войти</button>
                 <p class="login-error">Неверный логин или пароль</p>
-            </div>
+            </form>
+        </div>
 
-            <script>
-            function togglePassword() {
-                var passwordField = document.getElementById('password');
-                passwordField.type = passwordField.type === 'password' ? 'text' : 'password';
+        <script>
+        function togglePassword() {
+            var passwordField = document.getElementById('password');
+            if (passwordField.type === 'password') {
+                passwordField.type = 'text';
+            } else {
+                passwordField.type = 'password';
             }
-            </script>
-        </body>
-        </html>
-        """)
+        }
+        </script>
+    </body>
+    </html>
+    """)
 
 # окно ввода логина и пароля
 @app.get("/login", response_class=HTMLResponse)
 def login_page():
     return """
+    <!DOCTYPE html>
     <html>
     <head>
         <title>Вход в систему</title>
-        <style>
-            .login-body {
-                font-family: Arial;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                height: 100vh;
-            }
-            .login-form {      /* рамка */
-                border: 2px solid #1073b7;
-                padding: 30px;
-                border-radius: 10px;
-                width: 300px;
-            }
-            .login-input {
-                width: 100%;
-                padding: 8px;
-                margin: 10px 0;
-                box-sizing: border-box;
-            }
-            .login-button {
-                background: #1073b7;
-                color: white;
-                border: none;
-                padding: 10px;
-                width: 60%;
-                cursor: pointer;
-                margin-top: 10px;
-                border-radius: 4px;
-                display: block;
-                margin-left: auto;
-                margin-right: auto;
-            }
-            #seepassword {
-                position: absolute;
-                right: 10px;
-                top: 50%;
-                transform: translateY(-50%);
-                cursor: pointer;
-                font-size: 12px;
-                background: white;
-                padding: 0 5px;
-            }
-            .h2 {
-                text-align: center;
-                color: #0952a0;
-            }
-        </style>
+        <link rel="stylesheet" href="/static/css/style.css">
     </head>
-
     <body class="login-body">
-    <div class="login-form">
-        <h2 class="h2">Вход в систему</h2>
-        <form method="post" action="/login">
-            <input class="login-input" type="text" name="username" placeholder="Логин" required>
-            <div style="position: relative;">
-                <input class="login-input" type="password" name="password" id="password" placeholder="Пароль" required>
-                <span onclick="togglePassword()" id="seepassword">Показать</span>
-            </div>
-            <button class="login-button" type="submit">Войти</button>
-        </form>
-    </div>
-
-    <!-- функция для нажатия кнопки показать и пароль станет видимым. если при нажатии кнопки звездочки, то будут буквы и наоборот -->
-    <script>
-    function togglePassword() {
-        var passwordField = document.getElementById('password');
-        if (passwordField.type === 'password') {
-            passwordField.type = 'text';
-        } 
-        else {
-            passwordField.type = 'password';
+        <div class="login-container">
+            <h2 class="login-title">Вход в систему</h2>
+            <form method="post" action="/login">
+                <input class="login-input" type="text" name="username" placeholder="Логин" required>
+                <div class="password-wrapper">
+                    <input class="login-password" type="password" name="password" id="password" placeholder="Пароль" required>
+                    <span onclick="togglePassword()" class="toggle-password">Показать</span>
+                </div>
+                <button class="login-button" type="submit">Войти</button>
+            </form>
+        </div>
+        <script>
+        function togglePassword() {
+            var passwordField = document.getElementById('password');
+            passwordField.type = passwordField.type === 'password' ? 'text' : 'password';
         }
-    }
-    </script>"""
+        </script>
+    </body>
+    </html>
+    """
+
 
 @app.get("/logout")
 async def logout(request: Request):
-    # очищаем сессию
-    request.session.clear()
-    # отправляем на страницу входа
-    return RedirectResponse("/login", status_code=303)
-
+    request.session.clear()   # очищаем сессию
+    return RedirectResponse("/login", status_code=303)     # отправляем на страницу входа
 
 # функция главного экрана с пагинацией
 @app.get("/", response_class=HTMLResponse)
-def home(request: Request, page: int = 1, page_size: int = 4000):
-    contracts = get_clients_page(request, page, page_size)  # занесение списка из строк которые будем выводить
-    total_count = get_total_count(request)  # занесение общего числа строк
+def home(request: Request, page: int = 1, page_size: int = 4000, pub: str = '1'):
+    contracts = get_clients_page(request, page, page_size, pub)  # занесение списка из строк которые будем выводить
+    total_count = get_total_count(request, pub)  # занесение общего числа строк
 
     # расссчитывает сколько всего должно быть страниц на всё количество с округлением вверх
     total_pages = (total_count + page_size - 1) // page_size
@@ -262,106 +160,11 @@ def home(request: Request, page: int = 1, page_size: int = 4000):
     podr_options = '<option value="">Все подразделения</option>'
     for podr in podr_list:
         podr_options += f'<option value="{podr["id"]}">{podr["name"]}</option>'
-
+    unpublished_checked = 'checked' if pub == '0' else ''
     html = """  
     <html>
-    <head><title>Договора в ЕИС</title>
-    <style>
-    .table-columns {
-        width: 100%;     /* ширина таблицы */
-        max-width: 100%;    /* максимально занимаемая ширина таблицы */
-        table-layout: fixed;     /* фиксированные размеры столбцов */
-        border-collapse: collapse;    /* делает двойные границы одной линией */
-    }
-
-    .table-columns th:nth-child(1),
-    .table-columns td:nth-child(1) { width: 5%; }
-    .table-columns th:nth-child(2),
-    .table-columns td:nth-child(2) { width: 15%; }
-    .table-columns th:nth-child(3),
-    .table-columns td:nth-child(3) { width: 10%; }
-    .table-columns th:nth-child(4),
-    .table-columns td:nth-child(4) { width: 10%; }
-    .table-columns th:nth-child(5),
-    .table-columns td:nth-child(5) { width: 25%; }
-    .table-columns th:nth-child(6),
-    .table-columns td:nth-child(6) { width: 35%; }
-
-    th, td {    /* th - заголовки свойства самих ячеек */
-        white-space: normal;
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-    }
-    .h1 {
-        background: #e4f0fb; /* Цвет фона под заголовком */
-        color: #0952a0; /* Цвет текста */
-        padding: 8px; /* Поля вокруг текста */
-    }
-    .column-names {
-        color: #0952a0; /* Цвет текста */
-    }
-    tr:hover {
-        background-color: #f5f5f5; /* цвет при наведении */
-        cursor: pointer;           /* курсор в виде руки */
-    }
-    .pagination {      /* стиль для одной иконки страницы */
-        margin: 20px 0;
-        text-align: center;
-    }  
-    .pagination a {        /* стиль для всех иконок страниц */
-        display: inline-block;
-        padding: 5px 10px;
-        margin: 0 2px;
-        border: 1px solid #ddd;
-        text-decoration: none;
-    }
-    .pagination a.active {     /* стиль для активной страницы, которая нажата */
-        background: #032c57;
-        color: white;
-    }
-    .button-searchdog {
-        padding: 10px 20px;
-        background-color: #1073b7;
-        color: white;
-        border: none;
-        cursor: pointer;
-        font-size: 16px;
-        border-radius: 4px;
-    }
-    .button-in-window {
-        background-color: #1073b7;
-        color: white;
-        border: none;
-        cursor: pointer;
-        font-size: 14 px;
-        padding: 5px 10px;
-        border-radius: 4px;
-    }
-    .button-exit {      /*кнопка выхода из ученой записи*/
-        background-color: #1073b7;
-        color: white;
-        border: none;
-        cursor: pointer;
-        font-size: 16px;
-        padding: 10px 20px;
-        text-decoration: none;
-        border-radius: 4px;
-    }
-    .button-switch {
-        background-color: #28a745;
-        color: white;
-        border: none;
-        cursor: pointer;
-        font-size: 16px;
-        padding: 8px 16px;
-        border-radius: 4px;
-        text-decoration: none;
-        transition: background 0.2s;
-    }
-    .button-switch:hover {
-        background-color: #218838;
-    }
-    </style>
+        <head><title>Договора в ЕИС</title>
+        <link rel="stylesheet" href="/static/css/style.css">
     </head>
     """
     html += f"""
@@ -377,6 +180,10 @@ def home(request: Request, page: int = 1, page_size: int = 4000):
         
         <div style="font-size: 15px; color: #666; margin-bottom: 5px;">
             Всего договоров: <strong>{total_count}</strong>
+            <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                    <input type="checkbox" id="unpublished_checkbox" onchange="applyUnpublishedFilter()" {unpublished_checked}>
+                <strong>Неопубликованные</strong>
+            </label>
         </div>
         <!--ДИАЛОГОВОЕ ОКНО ПОИСКА ДОГОВОРА------------------>
         <dialog id="dialogwindow" style="widht: 25%; border: 2px solid black;">
@@ -525,6 +332,12 @@ def home(request: Request, page: int = 1, page_size: int = 4000):
     function goToChoose() {
         window.location.href = '/choose';
     }
+    
+    function applyUnpublishedFilter() {
+        const checkbox = document.getElementById('unpublished_checkbox');
+        const pub = checkbox.checked ? '0' : '1';
+        window.location.href = '/?pub=' + pub;
+    }
     </script>
 
     <div class="pagination">
@@ -541,8 +354,7 @@ def home(request: Request, page: int = 1, page_size: int = 4000):
     """
     return html
 
-
-# функция перехода на старицу договора когда нашли 1 договор через кнопку найти договор
+#страница с таблицей после поиска договоров по условиям
 @app.get("/search", response_class=HTMLResponse)
 def search_page(request: Request,
                 numberdog: str = "",
@@ -616,30 +428,7 @@ def search_page(request: Request,
     html = f"""
     <html>
     <head><title>Результаты поиска</title>
-    <style>
-        .h1 {{
-            background: #e4f0fb;
-            color: #0952a0;
-            padding: 8px;
-        }}
-        .button-back {{
-            background: #1073b7;
-            font-size: 18px;
-            padding: 8px 20px;
-            color: white;
-            text-decoration: none;
-            border: none;
-            border-radius: 4px;
-            display: inline-block;
-            font-family: inherit;
-        }}
-        .button-back:hover {{
-            background: #0952a0;
-        }}
-        .table-wrapper {{
-            margin: 20px 0;
-        }}
-    </style>
+    <link rel="stylesheet" href="/static/css/style.css">
     </head>
     <body>
     <div>
@@ -878,80 +667,9 @@ def contract_page(request: Request, contract_id: int, from_page: str = "1"):
     # оформление страницы договора
     html = f"""
     <html>
-    <head><title>Договор {contract_id}</title>
-    <style>
-    .button-back-page {{
-        background: #1073b7; /* Цвет фона */
-        font-size: 18px; /* Размер текста */
-        padding: 5px 20px; /* Поля вокруг текста */
-        color: white;
-        text-decoration: none;
-        border-radius: 4px; 
-    }}
-    .button-back-page:hover {{
-        background: #0952a0;
-        border-radius: 4px; 
-    }}
-    .h1 {{
-        background: #e4f0fb; /* Цвет фона под заголовком */
-        color: #0952a0; /* Цвет текста */
-        padding: 8px; /* Поля вокруг текста */
-    }}
-    .info-container {{    /* фон под информацией */
-        background: #f8f9fa;  /* Светло-серый фон */
-        padding-top: 10px;
-        padding-left: 20px;
-        padding-right: 20px;
-        padding-bottom: 10px; 
-        border-radius: 10px;
-        margin: 20px 0;
-        display: flow-root; 
-    }}
-    .konk-Сheckbox {{   /* квадратик с галочкой */
-        width: 24px;
-        height: 24px;
-        cursor: pointer;
-    }}
-    .button-save {{
-        background: #1073b7;       /* фон кнопки */ 
-        font-size: 18px;      /* размер текста */
-        padding: 5px 20px;      /* отступы для текста внутри кнопки */
-        color: white;    /* цвет текста */
-        text-decoration: none;      /* убирает подчерквание */
-        cursor: pointer;     /* курсор руки при наведении */
-        border-radius: 4px;     /* сруление углов кнопки */
-        font-family: inherit;    /* наследование */
-        border: 1px solid #1073b7;
-    }}
-    .button-save:hover {{
-        background: #0952a0;    /* темно синий при наведении мыши */
-        border: 1px solid #1073b7
-    }}
-    .button-adddeletepayment {{
-        width: 30px; 
-        height: 30px; 
-        background: #1073b7; 
-        color: white; 
-        border: none; 
-        border-radius: 3px; 
-        cursor: pointer; 
-        font-size: 18px;
-    }}
-    .button-docs {{
-        background: #1073b7;
-        color: white;
-        border: none;
-        padding: 8px 8px;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 18px;
-        margin-top: 10px;
-    }}
-    .button-docs:hover {{
-        background: #0952a0;
-    }}
-
-    </style>
+    <head>
+        <title>Договор {contract_id}</title>
+        <link rel="stylesheet" href="/static/css/style.css">
     </head>
 
     <body>
@@ -2314,69 +2032,7 @@ def choose_page(request: Request):
     <html>
     <head>
         <title>Выбор программы</title>
-        <style>
-            .choose_body {{
-                font-family: Arial, sans-serif;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                height: 100vh;
-                margin: 0;
-                background: #f0f2f5;
-            }}
-            .choose_container {{
-                text-align: center;
-                background: white;
-                padding: 40px;
-                border-radius: 10px;
-                box-shadow: 0 0 20px rgba(0,0,0,0.1);
-            }}
-            .choose_h1 {{
-                color: #0952a0;
-                margin-bottom: 10px;
-            }}
-            .welcome {{
-                color: #666;
-                margin-bottom: 30px;
-                font-size: 16px;
-            }}
-            .buttons {{
-                display: flex;
-                gap: 30px;
-                justify-content: center;
-            }}
-            .btn {{
-                background: #1073b7;
-                color: white;
-                border: none;
-                padding: 15px 30px;
-                font-size: 18px;
-                border-radius: 5px;
-                cursor: pointer;
-                text-decoration: none;
-                display: inline-block;
-            }}
-            .btn:hover {{
-                background: #0952a0;
-            }}
-            .btn-secondary {{
-                background: #6c757d;
-            }}
-            .btn-secondary:hover {{
-                background: #5a6268;
-            }}
-            .logout {{
-                margin-top: 30px;
-            }}
-            .logout a {{
-                color: #999;
-                text-decoration: none;
-                font-size: 14px;
-            }}
-            .logout a:hover {{
-                color: #666;
-            }}
-        </style>
+        <link rel="stylesheet" href="/static/css/style.css">
     </head>
     <body class="choose_body">
         <div class="choose_container">
@@ -2384,7 +2040,7 @@ def choose_page(request: Request):
             <div class="welcome">Добро пожаловать, <strong>{username}</strong>!</div>
             <div class="buttons">
                 <a href="/" class="btn">Расходные договоры и закупки</a>
-                <button onclick="showMessage()" class="btn btn-secondary">Другая программа</button>
+                <button onclick="showMessage()" class="btn btn-secondary">В разработке</button>
             </div>
             <div class="logout">
                 <a href="/logout">Выйти</a>
