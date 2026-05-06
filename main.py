@@ -15,6 +15,7 @@ import io
 import openpyxl
 from openpyxl.styles import Font
 from fastapi.staticfiles import StaticFiles
+from to_ch_dog_view import router
 
 os.environ.pop('http_proxy', None)
 os.environ.pop('https_proxy', None)
@@ -29,6 +30,7 @@ os.environ['no_proxy'] = '*'
 
 # создание веб-приложения
 app = FastAPI()
+app.include_router(router)
 
 # Подключаем папку со статическими файлами
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -110,6 +112,7 @@ async def login_post(request: Request):
     </html>
     """)
 
+
 # окно ввода логина и пароля
 @app.get("/login", response_class=HTMLResponse)
 def login_page():
@@ -145,8 +148,9 @@ def login_page():
 
 @app.get("/logout")
 async def logout(request: Request):
-    request.session.clear()   # очищаем сессию
-    return RedirectResponse("/login", status_code=303)     # отправляем на страницу входа
+    request.session.clear()  # очищаем сессию
+    return RedirectResponse("/login", status_code=303)  # отправляем на страницу входа
+
 
 # функция главного экрана с пагинацией
 @app.get("/", response_class=HTMLResponse)
@@ -163,9 +167,10 @@ def home(request: Request, page: int = 1, page_size: int = 4000, pub: str = '1')
     unpublished_checked = 'checked' if pub == '0' else ''
     html = """  
     <html>
-        <head><title>Договора в ЕИС</title>
-        <link rel="stylesheet" href="/static/css/style.css">
-    </head>
+        <head>
+            <title>Договора в ЕИС</title>
+            <link rel="stylesheet" href="/static/css/style.css">
+        </head>
     """
     html += f"""
     <body>
@@ -177,7 +182,7 @@ def home(request: Request, page: int = 1, page_size: int = 4000, pub: str = '1')
                 <button class="button-exit" onclick="logout()">Выйти</button>
             </div>
         </div>
-        
+
         <div style="font-size: 15px; color: #666; margin-bottom: 5px;">
             Всего договоров: <strong>{total_count}</strong>
             <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
@@ -255,7 +260,7 @@ def home(request: Request, page: int = 1, page_size: int = 4000, pub: str = '1')
     if contracts:
         # Заголовки
         html += "<tr style='background-color: #f2f2f2;'>"
-        html += "<th style='padding: 10px; border: 1px solid;'>ID</th>"  # ← добавляем вручную
+        html += "<th style='padding: 10px; border: 1px solid;'>ID</th>"
         for key in contracts[0].keys():
             if key != 'ID договора':
                 html += f"<th style='padding: 10px; border: 1px solid;'>{key}</th>"
@@ -267,7 +272,7 @@ def home(request: Request, page: int = 1, page_size: int = 4000, pub: str = '1')
             display_id = f"8{str(contract_id).zfill(6)}"
 
             html += f"<tr onclick='showContract({contract_id}, {page})'>"
-            html += f"<td style='padding: 5px; border: 1px solid #ddd;'>{display_id}</td>"  # красивый ID
+            html += f"<td style='padding: 5px; border: 1px solid #ddd;'>{display_id}</td>"
             for key, value in contract.items():
                 if key != 'ID договора':
                     html += f"<td style='padding: 5px; border: 1px solid #ddd;'>{value}</td>"
@@ -328,11 +333,11 @@ def home(request: Request, page: int = 1, page_size: int = 4000, pub: str = '1')
     function logout() {
         window.location.href = '/logout';
     }
-    
+
     function goToChoose() {
         window.location.href = '/choose';
     }
-    
+
     function applyUnpublishedFilter() {
         const checkbox = document.getElementById('unpublished_checkbox');
         const pub = checkbox.checked ? '0' : '1';
@@ -354,7 +359,8 @@ def home(request: Request, page: int = 1, page_size: int = 4000, pub: str = '1')
     """
     return html
 
-#страница с таблицей после поиска договоров по условиям
+
+# страница с таблицей после поиска договоров по условиям
 @app.get("/search", response_class=HTMLResponse)
 def search_page(request: Request,
                 numberdog: str = "",
@@ -369,6 +375,10 @@ def search_page(request: Request,
                 gazsrv: str = "",
                 search_archive: str = ""
                 ):
+    print(f"=== ПОИСК ===")
+    print(f"Ищем номер: '{numberdog}'")
+    print(f"Длина номера: {len(numberdog)}")
+    print(f"Коды символов: {[ord(c) for c in numberdog]}")
     results = search_dog(request,
                          numberdog,
                          numberkontr,
@@ -453,6 +463,9 @@ def search_page(request: Request,
         </div>
         <div class="table-wrapper">
             <table border="1" style="border-collapse: collapse; width: 100%;">
+                        
+    <div style="overflow-x: auto;">
+    <table class="table-columns">
     """
 
     if results:
@@ -472,9 +485,9 @@ def search_page(request: Request,
             display_id = f"8{str(contract_id).zfill(6)}"
 
             if clean_params:
-                html += f"""<tr ondblclick="window.location.href='/contract/{contract_id}?from_page=search&{clean_params}'">"""
+                html += f"""<tr onclick="window.location.href='/contract/{contract_id}?from_page=search&{clean_params}'">"""
             else:
-                html += f"""<tr ondblclick="window.location.href='/contract/{contract_id}?from_page=search'">"""
+                html += f"""<tr onclick="window.location.href='/contract/{contract_id}?from_page=search'">"""
 
             # Выводим ячейки
             html += f"<td style='padding: 5px; border: 1px solid #ddd;'>{display_id}</td>"
@@ -513,7 +526,6 @@ def search_page(request: Request,
     </html>
     """
     return html
-
 
 # функция для показа информации клиента
 @app.get("/contract/{contract_id}", response_class=HTMLResponse)
@@ -990,7 +1002,6 @@ def contract_page(request: Request, contract_id: int, from_page: str = "1"):
 
             <div style="display: flex; gap: 10px; justify-content: flex-end;">
                 <button onclick="uploadDocument({contract_id})" class="button-save">Загрузить</button>
-                <button onclick="openSelectedFile()" class="button-save">Открыть</button>
                 <button onclick="deleteSelectedFile({contract_id})" class="button-save" style="background: #dc3545;">Удалить файл</button>
                 <button onclick="publishSelectedFile()" class="button-save">Опубликовать/отменить</button>
             </div>
@@ -1178,19 +1189,25 @@ def contract_page(request: Request, contract_id: int, from_page: str = "1"):
             });
         }
 
-        // Функция выделения строки
+        let selectedFilePath = null;
+        //функция выделения строки
         function selectFileRow(rowElement) {
             // Снимаем выделение со всех строк
             const allRows = document.querySelectorAll('.file-row');
             allRows.forEach(row => {
                 row.style.backgroundColor = '';
             });
-
+            
             // Выделяем выбранную строку
             rowElement.style.backgroundColor = '#e4f0fb';
-
+            
             // Сохраняем путь к файлу
             selectedFilePath = rowElement.getAttribute('data-file-path');
+            
+            // ✅ Автоматически открываем файл при клике
+            if (selectedFilePath) {
+                window.open(`/api/contract/open_file?path=${encodeURIComponent(selectedFilePath)}`, '_blank');
+            }
         }
 
         function togglePublish(contractId, filePath, publish) {
@@ -1256,30 +1273,6 @@ def contract_page(request: Request, contract_id: int, from_page: str = "1"):
             }
         }
 
-        let selectedFilePath = null;  
-
-        function selectFileRow(rowElement) {
-            // Снимаем выделение со всех строк
-            const allRows = document.querySelectorAll('.file-row');
-            allRows.forEach(row => {
-                row.style.backgroundColor = '';
-            });
-
-            // Выделяем выбранную строку
-            rowElement.style.backgroundColor = '#e4f0fb';
-
-            // Сохраняем путь к файлу
-            selectedFilePath = rowElement.getAttribute('data-file-path');
-        }
-
-        function openSelectedFile() {
-            if (!selectedFilePath) {
-                alert('Выберите файл');
-                return;
-            }
-            window.open(`/api/contract/open_file?path=${encodeURIComponent(selectedFilePath)}`, '_blank');
-        }
-
         function deleteSelectedFile(contractId) {
             if (!selectedFilePath) {
                 alert('Выберите файл');
@@ -1311,8 +1304,6 @@ def contract_page(request: Request, contract_id: int, from_page: str = "1"):
         }
 
         const docType = selectedDocType.value;
-        console.log('Выбран тип:', docType);
-
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = '.pdf,.jpg,.png,.doc,.docx';
@@ -1321,23 +1312,17 @@ def contract_page(request: Request, contract_id: int, from_page: str = "1"):
             const file = event.target.files[0];
             if (!file) return;
 
-            console.log('Выбран файл:', file.name, 'Размер:', file.size);
-
             const formData = new FormData();
             formData.append('doc_type', docType);
             formData.append('file', file);
 
             try {
-                console.log('Отправка запроса...');
-                const response = await fetch(`/api/contract/${contractId}/upload`, {
+                    const response = await fetch(`/api/contract/${contractId}/upload`, {
                     method: 'POST',
                     body: formData
                 });
-
-                console.log('Статус ответа:', response.status);
                 const data = await response.json();
-                console.log('Ответ сервера:', data);
-
+                
                 if (data.success) {
                     alert('Файл успешно загружен');
                     loadContractFiles(contractId);
@@ -1576,11 +1561,10 @@ def contract_page(request: Request, contract_id: int, from_page: str = "1"):
             agent: document.getElementById('agent').checked ? 1 : 0,
             smsp_okz: document.getElementById('smsp_okz').checked ? 1 : 0,
             d_work: document.getElementById('d_work').value,
-            predlog_txt: document.getElementById('predlog_txt').value
+            predlog_txt: document.getElementById('predlog_txt').value,
             publ: document.getElementById('publ_checkbox').checked ? 1 : 0,
             publ_d: document.getElementById('publ_date').value
         }};
-        console.log('Данные для отправки:', data);
 
         //отправляем запрос на сервер, method: 'POST' - отправить данные
         fetch('/api/contract/{contract_id}/update', {{      //fetch - функция для отправление запросов на сервер, в нашем случае на адрес которые делает сохранение полей 
@@ -1646,7 +1630,6 @@ def contract_page(request: Request, contract_id: int, from_page: str = "1"):
     </html>
     """
     return html
-
 
 @app.post("/api/contract/{contract_id}/update")
 async def update_contract_api(contract_id: int, request: Request):
@@ -1745,7 +1728,6 @@ async def update_contract_api(contract_id: int, request: Request):
         print(f"Error in update_contract_api: {e}")
         return {"success": False, "message": f"Ошибка: {str(e)}"}
 
-
 # для добавления оплаты в первую таблицу
 @app.post("/api/contract/{contract_id}/add_payment")
 async def add_payment(contract_id: int, request: Request):
@@ -1761,7 +1743,6 @@ async def add_payment(contract_id: int, request: Request):
         print(f"Error adding payment: {e}")
         return {"success": False, "message": str(e)}
 
-
 # для удаления оплаты из первой таблицы
 @app.post("/api/contract/delete_payments")
 async def delete_payments(request: Request):
@@ -1776,7 +1757,6 @@ async def delete_payments(request: Request):
         print(f"Error deleting payments: {e}")
         return {"success": False, "message": str(e)}
 
-
 @app.get("/api/contract/{contract_id}/files")
 async def get_contract_files_api(contract_id: int, request: Request):
     try:
@@ -1790,7 +1770,6 @@ async def get_contract_files_api(contract_id: int, request: Request):
         return {"success": True, "files": files}
     except Exception as e:
         return {"success": False, "error": str(e)}
-
 
 # удаление файла пдф договора
 @app.post("/api/contract/{contract_id}/files/delete")
@@ -1807,7 +1786,6 @@ async def delete_contract_file(request: Request):
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-
 # открыть и скачать файл пдф договора
 @app.get("/api/contract/open_file")
 async def open_file(request: Request, path: str):
@@ -1815,18 +1793,15 @@ async def open_file(request: Request, path: str):
         if not os.path.exists(path):
             return {"success": False, "error": "Файл не найден"}
 
-        # Возвращаем файл с заголовком для скачивания
+        # Возвращаем файл для просмотра в браузере
         return FileResponse(
             path=path,
             filename=os.path.basename(path),
-            media_type='application/octet-stream',  # <- важно!
-            headers={
-                "Content-Disposition": f"attachment; filename={os.path.basename(path)}"
-            }
+            media_type='application/pdf',
+            headers={"Content-Disposition": f"inline; filename={os.path.basename(path)}"}
         )
     except Exception as e:
         return {"success": False, "error": str(e)}
-
 
 # загрузить файл в таблицу для договора
 @app.post("/api/contract/{contract_id}/upload")
@@ -2015,10 +1990,10 @@ async def update_azec_ds(request: Request):
         return {"success": True, "message": "Данные обновлены"}
 
     except Exception as e:
-        (f"Error in save_ds: {e}")
+        print:(f"Error in save_ds: {e}")
         return {"success": False, "message": str(e)}
 
-#страница выбора программы
+# страница выбора программы
 @app.get("/choose", response_class=HTMLResponse)
 def choose_page(request: Request):
     user = request.session.get("user")
@@ -2036,22 +2011,16 @@ def choose_page(request: Request):
     </head>
     <body class="choose_body">
         <div class="choose_container">
-            <h1 style="choose_h1">Выберите программу</h1>
+            <h1 class="choose_h1">Выберите программу</h1>
             <div class="welcome">Добро пожаловать, <strong>{username}</strong>!</div>
             <div class="buttons">
                 <a href="/" class="btn">Расходные договоры и закупки</a>
-                <button onclick="showMessage()" class="btn btn-secondary">В разработке</button>
+                <a href="/dogs" class="btn">Просмотр договоров</a>
             </div>
             <div class="logout">
                 <a href="/logout">Выйти</a>
             </div>
         </div>
-
-        <script>
-            function showMessage() {{
-                alert('Программа в разработке. Скоро будет доступна.');
-            }}
-        </script>
     </body>
     </html>
     """
@@ -2063,5 +2032,6 @@ if __name__ == '__main__':
         host="0.0.0.0",
         port=8001,
         ssl_keyfile="key.pem",
-        ssl_certfile="cert.pem"
-    )  # ip aдрес моего компьютера 192.168.1.228, по умолчанию 127.0.0.1, https://192.168.1.228:8001
+        ssl_certfile="cert.pem",
+        reload = True
+    )

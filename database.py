@@ -2,7 +2,6 @@ import pyodbc
 import winrm
 import os
 from datetime import datetime
-import platform
 
 CONTRACTS_BASE_PATH = os.environ.get('CONTRACTS_PATH', '/mnt/oblgaz/system/contracts_archive')
 pyodbc.pooling = True
@@ -11,24 +10,28 @@ pyodbc.pooling = True
 driver = '{ODBC Driver 17 for SQL Server}'
 server = 'gazprosql'
 database = 'tmp_dog'
+database_ch = 'to_ch_dog'
 connection_string = f'DRIVER={driver};SERVER={server};DATABASE={database};Trusted_Connection=yes'
 
-
-# создает подключение к серверу от имени пользователя
+#подключение к базе tmp_dog
 def get_user_connection(request):
-    user = request.session.get("user")
-    if not user:
-        return None
-
     conn_str = (
         f'DRIVER={driver};'
         f'SERVER={server};'
         f'DATABASE={database};'
-        f'UID={user["login"]};'
         f'Trusted_Connection=yes;'
     )
     return pyodbc.connect(conn_str)
 
+#подключение к базе to_ch_dog
+def get_user_connection_ch(request):
+    conn_str = (
+        f'DRIVER={driver};'
+        f'SERVER={server};'
+        f'DATABASE={database_ch};'
+        f'Trusted_Connection=yes;'
+    )
+    return pyodbc.connect(conn_str)
 
 # функция вывода таблицы почастично ( первые 4000 клиентов. вторые 4000 клиентов и тд)
 def get_clients_page(request, page: int = 1, page_size: int = 4000, pub: str = '1'):
@@ -99,8 +102,7 @@ def get_contract_id(request, contract_id: int):
         if not user:
             print("Нет пользователя в сессии")
             return []
-        otd = user.get("otd")
-        search_podr = otd if otd else 0
+
         cursor = connection.cursor()
         cursor.execute("""
             select 
@@ -158,7 +160,6 @@ def get_contract_id(request, contract_id: int):
                 dog.predlog_txt as '№ предложения',
                 dog.sysnum as 'Системный номер'
 
-
             from dog 
             left join klint on dog.klient = klint.id
             left join dog_okz on dog.id = dog_okz.id_dog
@@ -180,7 +181,6 @@ def get_contract_id(request, contract_id: int):
     except Exception as e:
         print(f'Error: {e}')
         return None
-
 
 # считает всех всех клиентов (нужно для просчета количества выводимых клиентов)
 def get_total_count(request, pub: str = '1'):
@@ -219,6 +219,7 @@ def get_total_count(request, pub: str = '1'):
     except Exception as e:
         print(f'Error in get_total_count: {e}')
         return 0
+
 # обновление полей и чекбоксов
 def update_par(request, contract_id: int, konk: int, prol: int, beznds: int, opl: int, eis: int, statusD: int,
                d_end: str, sposobzak: str, VIdZAK: int, numzak: str, predlog: int, dat_docosznak: str,
@@ -230,14 +231,7 @@ def update_par(request, contract_id: int, konk: int, prol: int, beznds: int, opl
         if not connection:
             return []
         cursor = connection.cursor()
-        user = request.session.get("user")
-        user_otd = user.get("otd")
         cursor.execute("SELECT kodpodr FROM dog WHERE id = ?", contract_id)
-        row = cursor.fetchone()
-
-        # если user_otd = 0 - разрешаем обновлять любые договоры
-        # if not row or (user_otd != 0 and row[0] != user_otd):
-        #   return False
 
         cursor.execute("""
             UPDATE dog 
@@ -297,7 +291,7 @@ def update_par(request, contract_id: int, konk: int, prol: int, beznds: int, opl
         return False
 
 
-# функция поиска 1 или несколько договоров после нажатия кнопки найти на диалоговом окне
+# функция поиска 1 или нескольких договоров после нажатия кнопки найти на диалоговом окне
 def search_dog(request,
                numberdog: str = "",
                numberkontr: str = "",
@@ -314,15 +308,21 @@ def search_dog(request,
     try:
         connection = get_user_connection(request)
         if not connection:
+            print("НЕТ ПОДКЛЮЧЕНИЯ К БД!")
             return []
 
         user = request.session.get("user")
         if not user:
+            print("НЕТ ПОЛЬЗОВАТЕЛЯ В СЕССИИ!")
             return []
-        otd = user.get("otd")
+
         cursor = connection.cursor()
 
-        if search_archive:
+        # Получаем id_user
+        id_user = user.get("id_user")
+
+        # Формируем базовый SQL в зависимости от архива
+        if search_archive == '1':
             sql = """
                 SELECT 
                     dog.id as 'ID договора',
@@ -330,12 +330,15 @@ def search_dog(request,
                     dog.n4 as '№ контрагента',
                     dog.dd as 'Дата договора',
                     klint.name as 'Контрагент', 
-                    dog.predmet as 'Предмет договора',
-                    dog.summa as 'Сумма договора'
+                    dog.predmet as 'Предмет договора'
                 FROM dog
                 LEFT JOIN klint ON dog.klient = klint.id
                 LEFT JOIN dog_okz ON dog.id = dog_okz.id_dog
-                WHERE 1=1
+                LEFT JOIN dog_ident ON dog.kodpodr = dog_ident.otd 
+                                    OR dog_ident.opt <= 6 
+                                    OR dog.n2 = dog_ident.viddog
+                WHERE dog.dohod = 3
+                    AND dog_ident.id_user = ?
 
                 UNION ALL
 
@@ -345,15 +348,18 @@ def search_dog(request,
                     dog.n4 as '№ контрагента',
                     dog.dd as 'Дата договора',
                     klint.name as 'Контрагент', 
-                    dog.predmet as 'Предмет договора',
-                    dog.summa as 'Сумма договора'
+                    dog.predmet as 'Предмет договора'
                 FROM dogarh dog
                 LEFT JOIN klint ON dog.klient = klint.id
                 LEFT JOIN dog_okz ON dog.id = dog_okz.id_dog
-                WHERE 1=1
+                LEFT JOIN dog_ident ON dog.kodpodr = dog_ident.otd 
+                                    OR dog_ident.opt <= 6 
+                                    OR dog.n2 = dog_ident.viddog
+                WHERE dog.dohod = 3
+                    AND dog_ident.id_user = ?
             """
+            params = [id_user, id_user]
         else:
-            # щем только в основных договорах
             sql = """
                 SELECT 
                     dog.id as 'ID договора',
@@ -361,70 +367,69 @@ def search_dog(request,
                     dog.n4 as '№ контрагента',
                     dog.dd as 'Дата договора',
                     klint.name as 'Контрагент', 
-                    dog.predmet as 'Предмет договора',
-                    dog.summa as 'Сумма договора'
+                    dog.predmet as 'Предмет договора'
                 FROM dog
                 LEFT JOIN klint ON dog.klient = klint.id
                 LEFT JOIN dog_okz ON dog.id = dog_okz.id_dog
-                WHERE 1=1
+                LEFT JOIN dog_ident ON dog.kodpodr = dog_ident.otd 
+                                    OR dog_ident.opt <= 6 
+                                    OR dog.n2 = dog_ident.viddog
+                WHERE dog.dohod = 3
+                    AND dog_ident.id_user = ?
             """
+            params = [id_user]
 
-        params = []
-        # подразделение (фильтр по отделу пользователя)
-        if podr:
-            search_podr = int(podr)
-        elif otd:
-            search_podr = otd
-        else:
-            search_podr = 0
-
-        sql += " AND (dog.kodpodr = ? OR ? = 0)"
-        params.append(search_podr)
-        params.append(search_podr)
-
-        # номер договора
+        # Номер договора - поиск по ЛЮБОЙ части номера
         if numberdog:
-            sql += " AND dbo.dog_fGetNum(dog.id) = ?"
-            params.append(numberdog)
+            numberdog = numberdog.replace('P', 'Р')
+            sql += " AND dbo.dog_fGetNum(dog.id) LIKE ?"
+            params.append(f'%{numberdog}%')
 
-        # номер контрагента
+        # Номер контрагента
         if numberkontr:
             sql += " AND dog.n4 LIKE ?"
             params.append(f'%{numberkontr}%')
 
-        # дата с
+        # Дата с
         if date_from:
             sql += " AND dog.dd >= ?"
             params.append(date_from)
 
-        # дата по
+        # Дата по
         if date_to:
             sql += " AND dog.dd <= ?"
             params.append(date_to)
 
-        # сумма от
+        # Сумма от
         if sum_from:
-            sql += " AND dog.summa >= ?"
-            params.append(float(sum_from))
+            try:
+                sql += " AND dog.summa >= ?"
+                params.append(float(sum_from))
+            except ValueError:
+                print(f"❌ Ошибка: сумма от '{sum_from}' не число")
 
-        # сумма до
+        # Сумма до
         if sum_to:
-            sql += " AND dog.summa <= ?"
-            params.append(float(sum_to))
+            try:
+                sql += " AND dog.summa <= ?"
+                params.append(float(sum_to))
+            except ValueError:
+                print(f"❌ Ошибка: сумма до '{sum_to}' не число")
 
-        # предмет договора
+        # Предмет договора
         if pr_dog:
             sql += " AND dog.predmet LIKE ?"
             params.append(f'%{pr_dog}%')
 
-        # нижегородоблгаз Сервис
-        if gazsrv:
+        # Нижегородоблгаз Сервис
+        if gazsrv == '1':
             sql += " AND dog.gazsrv = 1"
 
-        # только подлежащие публикации (только если НЕ ищем в архиве)
+        # Только подлежащие публикации
         if publ and not search_archive:
             sql += " AND dog_okz.publ = 0 AND dog.eis = 1"
 
+        # Сортировка
         sql += " ORDER BY dog.id"
 
         cursor.execute(sql, params)
@@ -440,9 +445,10 @@ def search_dog(request,
         return result
 
     except Exception as e:
-        print(f'Search error: {e}')
+        print(f'❌ Search error: {e}')
+        import traceback
+        traceback.print_exc()
         return []
-
 
 # функция берёт результат процедуры (для таблицы оплат) - первая таблица
 def get_dog_payments(request, contract_id: int):
@@ -469,7 +475,6 @@ def get_dog_payments(request, contract_id: int):
     except Exception as e:
         print(f'Error getting payments: {e}')
         return []
-
 
 # функция берёт процедуру dsproc для второй таблицы Дополнительные соглашения
 def get_ds_data(request, contract_id: int):
@@ -500,7 +505,6 @@ def get_ds_data(request, contract_id: int):
         print(f'Error getting ds data: {e}')
         return []
 
-
 # функция берёт процедуру и вытаскивает результат процедуры (для таблицы оплат из 1C) - третья таблица
 def get_dog_payments1С(request, contract_id: int):
     try:
@@ -526,7 +530,6 @@ def get_dog_payments1С(request, contract_id: int):
     except Exception as e:
         print(f'Error getting payments: {e}')
         return []
-
 
 # проверка логина и пароля, выполнение команды на удаленном компе и возвращения true/false в результате, показывая подключилось или нет
 def verify_windows_login(host, username, password):
@@ -555,7 +558,6 @@ def verify_windows_login(host, username, password):
         # ловим любые другие ошибки
         print(f"Ошибка подключения для {username}: {e}")
         return False
-
 
 # функция получения отдела зашедшего пользователя для того чтобы вывести только те договора которые относятся к его отделу
 def get_user_otd(username: str):
@@ -609,7 +611,6 @@ def add_dog_payment(request, contract_id: int, summa: float, date: str):
         print(f'Error adding payment: {e}')
         return False
 
-
 # функция удаления оплаты из таблицы
 def delete_dog_payments(request, payment_ids: list):
     try:
@@ -635,12 +636,8 @@ def delete_dog_payments(request, payment_ids: list):
 # взятие файлов договора из смонтированной папки
 def get_contract_files(request, contract_num: str):
     try:
-        print(f"=== get_contract_files для договора {contract_num} ===")
-
         base_path = CONTRACTS_BASE_PATH
         contract_folder = os.path.join(base_path, str(contract_num))
-
-        print(f"Ищем папку: {contract_folder}")
 
         if not os.path.exists(contract_folder):
             print(f"Папка не найдена: {contract_folder}")
@@ -655,11 +652,11 @@ def get_contract_files(request, contract_num: str):
             connection = get_user_connection(request)
             if connection:
                 cursor = connection.cursor()
-                print("✅ Подключение к БД установлено")
+                print("Подключение к БД установлено")
             else:
-                print("❌ Нет подключения к БД")
+                print("Нет подключения к БД")
         except Exception as e:
-            print(f"❌ Ошибка подключения к БД: {e}")
+            print(f"Ошибка подключения к БД: {e}")
 
         for filename in os.listdir(contract_folder):
             file_path = os.path.join(contract_folder, filename)
@@ -733,7 +730,6 @@ def get_contract_files(request, contract_num: str):
         traceback.print_exc()
         return []
 
-
 # получение списка подразделений для поиска по договору
 def get_podr_list(request):
     try:
@@ -757,3 +753,138 @@ def get_podr_list(request):
     except Exception as e:
         print(f'Error getting podr list: {e}')
         return []
+
+
+#ДЛЯ ВТОРОЙ ЧАСТИ ПРОГРАММЫ
+#для главной страницы всех диалогов
+def get_dogs_ch(request):
+    try:
+        connection = get_user_connection_ch(request)
+        if not connection: return[]
+        cursor = connection.cursor()
+        cursor.execute("""
+            select top 200 to_ch_dog_tab.id_dog, 
+            to_ch_type_dog.name_type, 
+            to_ch_dog_tab.num_dog_txt, 
+            to_ch_dog_tab.d_dog, 
+            to_ch_dog_tab.saldo_now, 
+            to_ch_status.name_st
+            from to_ch_dog_tab
+            inner join to_ch_type_dog on to_ch_dog_tab.type_dog = to_ch_type_dog.id_type
+            inner join to_ch_status on to_ch_dog_tab.status = to_ch_status.id_status
+            where d_dog <= GETDATE()
+            order by d_dog desc
+        """)
+        result = []
+        columns = [column[0] for column in cursor.description]
+        rows = cursor.fetchall()
+        for row in rows:
+            row_dict = dict(zip(columns, row))
+            result.append(row_dict)
+        cursor.close()
+        connection.close()
+        return result
+    except Exception as e:
+        print(f'Error in get_dogs:{e}')
+        return []
+#для показа инфы по договору
+def get_dog_ch(request, id_dog: int):
+    try:
+        connection = get_user_connection_ch(request)
+        if not connection: return []
+        cursor = connection.cursor()
+        cursor.execute("""
+            select to_ch_dog_tab.id_dog, 
+            to_ch_type_dog.name_type, 
+            to_ch_dog_tab.num_dog_txt, 
+            to_ch_dog_tab.d_dog, 
+            to_ch_dog_tab.saldo_now, 
+            to_ch_status.name_st,
+            to_ch_klient.FIO as фио, 
+            to_ch_klient.telefon as телефон,
+            to_ch_klient.psp_num as номерпаспорта,
+            to_ch_klient.psp_ser as серияпаспорта,
+            to_ch_klient.psp_d as датавыдачи,
+            to_ch_klient.psp_v as кемвыдан,
+            to_ch_klient.d_birth as датарождения,
+            to_ch_klient.email as почта, 
+            to_ch_klient.id_klient as айди,
+            to_ch_addr_object.addr as адрес
+            from to_ch_dog_tab
+            inner join to_ch_type_dog on to_ch_dog_tab.type_dog = to_ch_type_dog.id_type
+            inner join to_ch_status on to_ch_dog_tab.status = to_ch_status.id_status
+            inner join to_ch_klient on to_ch_dog_tab.id_klient = to_ch_klient.id_klient 
+            inner join to_ch_addr_object on to_ch_klient.id_object = to_ch_addr_object.id_obj 
+            where to_ch_dog_tab.id_dog = ?
+            order by d_dog desc
+        """, id_dog)
+        columns = [column[0] for column in cursor.description]
+        row = cursor.fetchone()
+        cursor.close()
+        connection.close()
+        if row:  return dict(zip(columns, row))
+        else:    return None
+    except Exception as e:
+        print(f'Error in get_dog_ch: {e}')
+        return None
+#для таблицы самого договора
+def get_dog_tab2(request, id_dog: int):
+    try:
+        connection = get_user_connection_ch(request)
+        if not connection: return []
+        cursor = connection.cursor()
+        cursor.execute("""
+            select id_dog, 
+            dat_n, 
+            dat_k, 
+            s400, 
+            s500, 
+            s1431, 
+            sal_n
+            from to_ch_dog_tab2
+            where id_dog = ?
+        """, id_dog)
+        result = []
+        columns = [column[0] for column in cursor.description]
+        rows = cursor.fetchall()
+        for row in rows:
+            row_dict = dict(zip(columns, row))
+            result.append(row_dict)
+        cursor.close()
+        connection.close()
+        return result
+    except Exception as e:
+        print(f'Error in get_dog_tab2:{e}')
+        return []
+#для таблицы договоров клиента
+def dogs_for_klient(request, id_klient: int):
+    try:
+        connection = get_user_connection_ch(request)
+        if not connection: return []
+        cursor = connection.cursor()
+        cursor.execute("""
+            select to_ch_dog_tab.id_dog as айди, 
+            to_ch_dog_tab.d_dog as датадоговора, 
+            to_ch_type_dog.name_type as тип, 
+            to_ch_status.name_st as статус, 
+            to_ch_dog_tab.saldo_now as долг, 
+            to_ch_dog_tab2.sal_n as сальдо 
+            from to_ch_dog_tab
+            inner join to_ch_dog_tab2 on to_ch_dog_tab.id_dog = to_ch_dog_tab2.id_dog
+            inner join to_ch_type_dog on to_ch_dog_tab.type_dog = to_ch_type_dog.id_type 
+            inner join to_ch_status on to_ch_dog_tab.status = to_ch_status.id_status
+            where to_ch_dog_tab.id_klient = ?
+        """, id_klient)
+        result = []
+        columns = [column[0] for column in cursor.description]
+        rows = cursor.fetchall()
+        for row in rows:
+            row_dict = dict(zip(columns, row))
+            result.append(row_dict)
+        cursor.close()
+        connection.close()
+        return result
+    except Exception as e:
+        print(f'Error in dogs_for_klient:{e}')
+        return []
+
