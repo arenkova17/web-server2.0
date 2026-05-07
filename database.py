@@ -381,9 +381,8 @@ def search_dog(request,
 
         # Номер договора - поиск по ЛЮБОЙ части номера
         if numberdog:
-            numberdog = numberdog.replace('P', 'Р')
-            sql += " AND dbo.dog_fGetNum(dog.id) LIKE ?"
-            params.append(f'%{numberdog}%')
+            sql += "AND dog.n3 = ?"
+            params.append(numberdog)
 
         # Номер контрагента
         if numberkontr:

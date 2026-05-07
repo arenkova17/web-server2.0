@@ -375,10 +375,7 @@ def search_page(request: Request,
                 gazsrv: str = "",
                 search_archive: str = ""
                 ):
-    print(f"=== ПОИСК ===")
-    print(f"Ищем номер: '{numberdog}'")
-    print(f"Длина номера: {len(numberdog)}")
-    print(f"Коды символов: {[ord(c) for c in numberdog]}")
+
     results = search_dog(request,
                          numberdog,
                          numberkontr,
@@ -811,7 +808,7 @@ def contract_page(request: Request, contract_id: int, from_page: str = "1"):
         <div style="">
             <div style="display: flex; gap: 30px; margin-bottom: 10px;">
                 <div><input type="checkbox" id="prol" {prol_checked}>
-                <label for="prol" style="cursor: pointer;"><strong>Пролонгация:</strong></label></div>
+                <label for="prol" style="cursor: pointer;"><strong>Пролонгация</strong></label></div>
 
                 <div><input type="checkbox" id="beznds" {beznds_checked}>
                 <label for="beznds" style="cursor: pointer;"><strong>Без НДС</strong></label></div>
