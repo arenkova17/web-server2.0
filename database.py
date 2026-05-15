@@ -755,14 +755,23 @@ def get_podr_list(request):
 
 
 #ДЛЯ ВТОРОЙ ЧАСТИ ПРОГРАММЫ
-#для главной страницы всех диалогов
+#для главной страницы всех договоров
 def get_dogs_ch(request):
     try:
         connection = get_user_connection_ch(request)
         if not connection: return[]
+
+        user = request.session.get("user")
+        user_id = user.get("id_user_ch") 
+        user_n3, has_access = get_user_access(request, user_id) if user_id else (0, False)
+        if not has_access:
+            return []
+
         cursor = connection.cursor()
-        cursor.execute("""
+        sql = """
             select top 200 to_ch_dog_tab.id_dog, 
+            to_ch_klient.id_klient,
+            to_ch_klient.FIO,
             to_ch_type_dog.name_type, 
             to_ch_dog_tab.num_dog_txt, 
             to_ch_dog_tab.d_dog, 
@@ -771,32 +780,38 @@ def get_dogs_ch(request):
             from to_ch_dog_tab
             inner join to_ch_type_dog on to_ch_dog_tab.type_dog = to_ch_type_dog.id_type
             inner join to_ch_status on to_ch_dog_tab.status = to_ch_status.id_status
+            inner join to_ch_klient on to_ch_dog_tab.id_klient = to_ch_klient.id_klient
             where d_dog <= GETDATE()
-            order by d_dog desc
-        """)
-        result = []
-        columns = [column[0] for column in cursor.description]
-        rows = cursor.fetchall()
-        for row in rows:
-            row_dict = dict(zip(columns, row))
-            result.append(row_dict)
+        """
+        params = []
+
+        if user_n3 != 0:
+            sql += " AND to_ch_klient.n3 = ?"
+            params.append(user_n3)
+
+        sql += " ORDER BY to_ch_dog_tab.d_dog DESC"
+
+        cursor.execute(sql, params)
+        result = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
+
         cursor.close()
         connection.close()
         return result
     except Exception as e:
-        print(f'Error in get_dogs:{e}')
+        print(f'Error in get_dogs_ch: {e}')
         return []
+
 #для показа инфы по договору
 def get_dog_ch(request, id_dog: int):
     try:
         connection = get_user_connection_ch(request)
         if not connection: return []
+
         cursor = connection.cursor()
         cursor.execute("""
             select to_ch_dog_tab.id_dog, 
-            to_ch_type_dog.name_type, 
-            to_ch_dog_tab.num_dog_txt, 
-            to_ch_dog_tab.d_dog, 
+            to_ch_type_dog.name_type as типдог, 
+            to_ch_dog_tab.d_dog as датадог, 
             to_ch_dog_tab.saldo_now, 
             to_ch_status.name_st,
             to_ch_klient.FIO as фио, 
@@ -808,7 +823,11 @@ def get_dog_ch(request, id_dog: int):
             to_ch_klient.d_birth as датарождения,
             to_ch_klient.email as почта, 
             to_ch_klient.id_klient as айди,
-            to_ch_addr_object.addr as адрес
+            to_ch_addr_object.addr as адрес,
+            to_ch_dog_tab.id_klient, 
+            to_ch_klient.m_vdgo as месобс,
+            to_ch_klient.postob as индекс,
+            to_ch_dog_tab.num_dog_txt as номердог
             from to_ch_dog_tab
             inner join to_ch_type_dog on to_ch_dog_tab.type_dog = to_ch_type_dog.id_type
             inner join to_ch_status on to_ch_dog_tab.status = to_ch_status.id_status
@@ -826,6 +845,7 @@ def get_dog_ch(request, id_dog: int):
     except Exception as e:
         print(f'Error in get_dog_ch: {e}')
         return None
+
 #для таблицы самого договора
 def get_dog_tab2(request, id_dog: int):
     try:
@@ -855,6 +875,7 @@ def get_dog_tab2(request, id_dog: int):
     except Exception as e:
         print(f'Error in get_dog_tab2:{e}')
         return []
+
 #для таблицы договоров клиента
 def dogs_for_klient(request, id_klient: int):
     try:
@@ -862,12 +883,12 @@ def dogs_for_klient(request, id_klient: int):
         if not connection: return []
         cursor = connection.cursor()
         cursor.execute("""
-            select to_ch_dog_tab.id_dog as айди, 
-            to_ch_dog_tab.d_dog as датадоговора, 
-            to_ch_type_dog.name_type as тип, 
-            to_ch_status.name_st as статус, 
-            to_ch_dog_tab.saldo_now as долг, 
-            to_ch_dog_tab2.sal_n as сальдо 
+            select to_ch_dog_tab.id_dog , 
+            to_ch_dog_tab.d_dog, 
+            to_ch_type_dog.name_type, 
+            to_ch_status.name_st, 
+            to_ch_dog_tab.saldo_now, 
+            to_ch_dog_tab2.sal_n
             from to_ch_dog_tab
             inner join to_ch_dog_tab2 on to_ch_dog_tab.id_dog = to_ch_dog_tab2.id_dog
             inner join to_ch_type_dog on to_ch_dog_tab.type_dog = to_ch_type_dog.id_type 
@@ -887,3 +908,228 @@ def dogs_for_klient(request, id_klient: int):
         print(f'Error in dogs_for_klient:{e}')
         return []
 
+#для таблицы выполнения работ по этому объекту
+def obj_for_klient(request, id_klient: int):
+    try:
+        connection = get_user_connection_ch(request)
+        if not connection: return []
+        cursor = connection.cursor()
+        cursor.execute("""
+            select vdg_obj_work.id_object, 
+            date_action, 
+            id_dog, 
+            to_ch_dog_tab.id_klient 
+            from vdg_obj_work
+            inner join to_ch_klient on vdg_obj_work.id_object = to_ch_klient.id_object
+            inner join to_ch_dog_tab on to_ch_klient.id_klient = to_ch_dog_tab.id_klient
+            where type_action = 10 and to_ch_dog_tab.id_klient = ?
+        """, id_klient)
+        result = []
+        columns = [column[0] for column in cursor.description]
+        rows = cursor.fetchall()
+        for row in rows:
+            row_dict = dict(zip(columns, row))
+            result.append(row_dict)
+        cursor.close()
+        connection.close()
+        return result
+    except Exception as e:
+        print(f'Error in obj_for_klient:{e}')
+        return []
+
+#для таблицы оплат по договору
+def payment_for_dog(request, id_dog: int):
+    try:
+        connection = get_user_connection_ch(request)
+        if not connection: return []
+        cursor = connection.cursor()
+        cursor.execute("""
+            select id_dog, 
+            dn, 
+            s
+            from to_ch_work
+            where id_dog = ?
+        """, id_dog)
+        result = []
+        columns = [column[0] for column in cursor.description]
+        rows = cursor.fetchall()
+        for row in rows:
+            row_dict = dict(zip(columns, row))
+            result.append(row_dict)
+        cursor.close()
+        connection.close()
+        return result
+    except Exception as e:
+        print(f'Error in payment_for_dog:{e}')
+        return []
+
+
+def search_dog_ch(request, idklient: str = "", iddog: str = "", numdog: str = "", address: str = ""):
+    try:
+        connection = get_user_connection_ch(request)
+        if not connection:
+            return []
+
+        cursor = connection.cursor()
+        sql = """
+            select top(200) to_ch_dog_tab.id_dog, 
+            to_ch_klient.id_klient,
+            to_ch_klient.FIO,
+            to_ch_type_dog.name_type, 
+            to_ch_dog_tab.num_dog_txt, 
+            to_ch_dog_tab.d_dog, 
+            to_ch_dog_tab.saldo_now, 
+            to_ch_status.name_st,
+            to_ch_addr_object.addr
+            from to_ch_dog_tab
+            inner join to_ch_type_dog on to_ch_dog_tab.type_dog = to_ch_type_dog.id_type
+            inner join to_ch_status on to_ch_dog_tab.status = to_ch_status.id_status
+            inner join to_ch_klient on to_ch_dog_tab.id_klient = to_ch_klient.id_klient
+            inner join to_ch_addr_object on to_ch_klient.id_object = to_ch_addr_object.id_obj 
+            where 1=1 and d_dog <= GETDATE()
+        """
+        params = []
+
+        if idklient:
+            sql += " AND to_ch_klient.id_klient = ?"
+            params.append(idklient)
+        if iddog:
+            sql += " AND to_ch_dog_tab.id_dog = ?"
+            params.append(iddog)
+        if numdog:
+            sql += " AND to_ch_dog_tab.num_dog_txt LIKE ?"
+            params.append(f'%{numdog}%')
+        if address:
+            sql += " AND to_ch_addr_object.addr LIKE ?"
+            params.append(f'%{address}%')
+
+        cursor.execute(sql, params)
+
+        columns = [column[0] for column in cursor.description]
+        result = []
+        for row in cursor.fetchall():
+            result.append(dict(zip(columns, row)))
+
+        cursor.close()
+        connection.close()
+        return result
+
+    except Exception as e:
+        print(f'Error in search_dog_ch: {e}')
+        return []
+
+
+def nach_for_dog(request, id_dog: int):
+    try:
+        connection = get_user_connection_ch(request)
+        if not connection: return []
+        cursor = connection.cursor()
+        cursor.execute("""
+            select id_dog, 
+            s, 
+            god, 
+            m
+            from to_ch_tabl_nach
+            where id_dog = ?
+        """, id_dog)
+        result = []
+        columns = [column[0] for column in cursor.description]
+        rows = cursor.fetchall()
+        for row in rows:
+            row_dict = dict(zip(columns, row))
+            result.append(row_dict)
+        cursor.close()
+        connection.close()
+        return result
+    except Exception as e:
+        print(f'Error in payment_for_dog:{e}')
+        return []
+
+def get_podryadchik(request, id_klient: int):
+    try:
+        connection = get_user_connection_ch(request)
+        if not connection:
+            return ''
+
+        cursor = connection.cursor()
+        cursor.execute("""
+            SELECT ISNULL(t.n_podr, '') AS n_podr
+            FROM (
+                SELECT vdg_home_podr.id_home, vdg_podryad.name_org AS n_podr, valid, active
+                FROM vdg_home_podr 
+                LEFT OUTER JOIN vdg_podryad ON vdg_home_podr.id_podr = vdg_podryad.id_p
+                WHERE valid = 1 AND active = 1 AND vdg_home_podr.god = YEAR(GETDATE())
+            ) AS t 
+            RIGHT OUTER JOIN to_ch_klient ON t.id_home = to_ch_klient.id_home 
+            WHERE to_ch_klient.id_klient = ?
+        """, (id_klient,))
+
+        row = cursor.fetchone()
+        cursor.close()
+        connection.close()
+
+        return row[0] if row and row[0] else 'Не указан'
+
+    except Exception as e:
+        print(f'Error in get_podryadchik: {e}')
+        return 'Ошибка'
+
+#актуальное оборудование
+def get_actual_equipment(request, id_dog: str):
+    try:
+        connection = get_user_connection_ch(request)
+        if not connection:
+            return ''
+
+        cursor = connection.cursor()
+        cursor.execute("""
+            SELECT STRING_AGG(name_ob, ', ') AS Актуальное_оборудование
+            FROM to_ch_j
+            INNER JOIN to_ch_story ON to_ch_j.id_st = to_ch_story.id_st
+            INNER JOIN to_ch_ob ON to_ch_story.id_ob = to_ch_ob.id_ob
+            INNER JOIN to_ch_dog_tab ON to_ch_j.id_dog = to_ch_dog_tab.id_dog
+            WHERE to_ch_dog_tab.id_dog = ?
+            GROUP BY to_ch_dog_tab.num_dog_txt, to_ch_dog_tab.d_dog
+        """, (id_dog))
+
+        row = cursor.fetchone()
+        cursor.close()
+        connection.close()
+
+        return row[0] if row and row[0] else 'Не указано'
+
+    except Exception as e:
+        print(f'Error in get_actual_equipment: {e}')
+        return 'Ошибка'
+
+"возвращает n3 юзера"
+def get_user_access(request, user_id: int):
+    try:
+        connection = get_user_connection_ch(request)
+        if not connection:
+            return 0, False
+
+        cursor = connection.cursor()
+        cursor.execute("SELECT n3 FROM to_ident WHERE id_user = ?", (user_id,))
+        row = cursor.fetchone()
+        cursor.close()
+        connection.close()
+
+        return (row[0] if row else 0), (row is not None)
+    except Exception as e:
+        print(f'Error in get_user_access: {e}')
+        return 0, False
+
+#ищет есть ли юзер в to_ident
+def get_user_id_ch(username: str):
+    try:
+        connection_string_ch = f'DRIVER={driver};SERVER={server};DATABASE=to_ch_dog;Trusted_Connection=yes'
+        conn = pyodbc.connect(connection_string_ch)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id_user FROM to_ident WHERE im = ?", (username,))
+        row = cursor.fetchone()
+        conn.close()
+        return row[0] if row else None
+    except Exception as e:
+        print(f'Error in get_user_id_ch: {e}')
+        return None

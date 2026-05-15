@@ -355,3 +355,112 @@ tr:hover {
     background-color: #f5f5f5;
     cursor: pointer;
 }
+
+/*ДИАЛОГОВОЕ ОКНО*/
+.dialog_window {
+    width: 90%;
+    height: 90%;
+    border-radius: 8px;
+    border: 2px solid #0952a0;
+    padding: 10px
+}
+
+/*ДОГОВОРЫ КЛИЕНТА */
+.table_dogs_for_klient{      /*рамка для таблицы*/
+    max-height: 195px;
+    overflow-y: auto;
+    width: 55%;
+    border: 1px solid #1073b7;
+    padding: 10px;
+    border-radius: 8px;
+}
+.table_dogs_for_klient h3 {    /*заголовок*/
+    margin: 0px;
+    color: #0952a0;
+    margin-bottom: 5px;
+}
+.table_dogs_for_klient table{       /*сама таблица*/
+    width: 100%;
+    border-collapse: collapse;
+}
+.table_dogs_for_klient thead th {
+    border: 1px solid #1073b7;
+    background-color: #e4f0fb;
+    font-size: 14px;
+    font-weight: bold;
+    text-align: center;
+    vertical-align: middle;
+    padding: 5px;
+}
+.table_dogs_for_klient td {
+    padding: 8px;
+    border: 1px solid #ddd;
+    text-align: left;
+    vertical-align: top;
+}
+.table_dogs_for_klient td:last-child {
+    width: 60px;
+    text-align: center;
+}
+
+/*ТАБЛИЦА НАЧИСЛЕНИЯ*/
+.table_nach_tab2{      /*рамка для таблицы*/
+    max-height: 200px;
+    overflow-y: auto;
+    width: 40%;
+    border: 1px solid #1073b7;
+    padding: 10px;
+    border-radius: 8px;
+    margin: 0 0 10px 0;
+
+}
+.table_nach_tab2 h3 {    /*заголовок*/
+    margin: 0px;
+    color: #0952a0;
+    margin-bottom: 5px;
+}
+.table_nach_tab2 table{       /*сама таблица*/
+    width: 100%;
+    border-collapse: collapse;
+}
+.table_nach_tab2 th{            /*заголовки в таблице*/
+    border: 1px solid #1073b7;
+    background-color: #e4f0fb;
+    font-size: 14px;
+    padding: 8px;
+}
+.table_nach_tab2 td {    /*для ячеек*/
+    padding: 5px;
+    border: 1px solid #ddd;
+}
+
+
+/*таблица в диалоговом окне - история договора*/
+.table_ch_tab2{      /*рамка для таблицы*/
+    max-height: 400px;
+    overflow-y: auto;
+    width: 50%;
+    border: 1px solid #1073b7;
+    padding: 10px;
+    border-radius: 8px;
+    margin: 0 0;
+}
+.table_ch_tab2 h3 {    /*заголовок*/
+    margin: 0px;
+    color: #0952a0;
+    margin-bottom: 5px;
+}
+.table_ch_tab2 table{       /*сама таблица*/
+    width: 100%;
+    border-collapse: collapse;
+}
+.table_ch_tab2 th{            /*заголовки в таблице*/
+    border: 1px solid #1073b7;
+    background-color: #e4f0fb;
+    font-size: 14px;
+    padding: 8px;
+}
+.table_ch_tab2 td {    /*для ячеек*/
+    padding: 5px;
+    border: 1px solid #ddd;
+}

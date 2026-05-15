@@ -4,7 +4,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, \
     StreamingResponse  # 1 - отправление html страниц, 2 - перенаправление юзера по разным страницам
 from database import get_clients_page, get_total_count, get_contract_id, update_par, search_dog, get_dog_payments, \
     verify_windows_login, get_user_otd, add_dog_payment, delete_dog_payments, get_dog_payments1С, get_ds_data, \
-    get_contract_files, get_user_connection, get_podr_list, get_user_id
+    get_contract_files, get_user_connection, get_podr_list, get_user_id, get_user_id_ch
 from starlette.middleware.sessions import SessionMiddleware  # созданий сессий, запоминание что пользователь вошел
 from starlette.middleware.base import BaseHTTPMiddleware  # проверка авторизации перед каждым запросом
 import os
@@ -38,12 +38,8 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):  # функция выполняется для каждого запроса
-        if request.url.path.startswith("/static"):
-            return await call_next(request)
-        # список путей доступных без авторизации - в нашем случае это только страница входа, иначе бы перед каждым запросом кидал страницу входа
         public_paths = ["/login", "/logout", "/choose"]
 
-        # если путь не в списке публичных, то проверяем есть ли пользователь в сессии, если да - то проходим, если нет - то отправка на логиниться
         if request.url.path not in public_paths:
             user = request.session.get("user")
             if not user:
@@ -67,56 +63,68 @@ app.add_middleware(
 )
 
 
-# обработчик отправки логина и пароля
 @app.post("/login")
 async def login_post(request: Request):
-    form = await request.form()  # забирает л/п
-    username = form.get("username")  # достает логин
-    password = form.get("password")  # достает пароль
-    remote_host = "gazprosql"  # указывает на каком сервере проверять подключение
+    form = await request.form()
+    username = form.get("username")
+    password = form.get("password")
+    remote_host = "gazprosql"
 
-    if verify_windows_login(remote_host, username, password):  # проверяет по функции проверки из database л/п
-        otd = get_user_otd(username)  # запоминает номер отдела у логина который ввели
+    if verify_windows_login(remote_host, username, password):
+        # Для первой программы (tmp_dog)
+        otd = get_user_otd(username)
         id_user = get_user_id(username)
-        request.session["user"] = {"login": username, "otd": otd, "id_user": id_user}  # запомниает логин пользователя
+
+        # Для второй программы (to_ch_dog)
+        id_user_ch = get_user_id_ch(username)
+
+        # Сохраняем оба ID в сессию
+        request.session["user"] = {
+            "login": username,
+            "otd": otd,
+            "id_user": id_user,  # для первой программы
+            "id_user_ch": id_user_ch  # для второй программы
+        }
+
         print(f"otd из функции: {otd}")
-        return RedirectResponse("/choose", status_code=303)  # и отправляет чувака на главную с таблицу
-    else:  # если не входит чувак то по новой ввод л/п
+        print(f"id_user (tmp_dog): {id_user}")
+        print(f"id_user_ch (to_ch_dog): {id_user_ch}")
+
+        return RedirectResponse("/choose", status_code=303)
+    else:
         return HTMLResponse(content="""
         <!DOCTYPE html>
         <html>
         <head>
             <title>Вход в систему</title>
             <link rel="stylesheet" href="/static/css/style.css">
-    </head>
-    <body class="login-body">
-        <div class="login-container">
-            <h2 class="login-title">Вход в систему</h2>
-            <form method="post" action="/login">
-                <input class="login-input" type="text" name="username" placeholder="Логин" required>
-                <div class="password-wrapper">
-                    <input class="login-password" type="password" name="password" id="password" placeholder="Пароль" required>
-                    <span onclick="togglePassword()" class="toggle-password">Показать</span>
-                </div>
-                <button class="login-button" type="submit">Войти</button>
-                <p class="login-error">Неверный логин или пароль</p>
-            </form>
-        </div>
-
-        <script>
-        function togglePassword() {
-            var passwordField = document.getElementById('password');
-            if (passwordField.type === 'password') {
-                passwordField.type = 'text';
-            } else {
-                passwordField.type = 'password';
+        </head>
+        <body class="login-body">
+            <div class="login-container">
+                <h2 class="login-title">Вход в систему</h2>
+                <form method="post" action="/login">
+                    <input class="login-input" type="text" name="username" placeholder="Логин" required>
+                    <div class="password-wrapper">
+                        <input class="login-password" type="password" name="password" id="password" placeholder="Пароль" required>
+                        <span onclick="togglePassword()" class="toggle-password">Показать</span>
+                    </div>
+                    <button class="login-button" type="submit">Войти</button>
+                    <p class="login-error">Неверный логин или пароль</p>
+                </form>
+            </div>
+            <script>
+            function togglePassword() {
+                var passwordField = document.getElementById('password');
+                if (passwordField.type === 'password') {
+                    passwordField.type = 'text';
+                } else {
+                    passwordField.type = 'password';
+                }
             }
-        }
-        </script>
-    </body>
-    </html>
-    """)
-
+            </script>
+        </body>
+        </html>
+        """)
 
 # окно ввода логина и пароля
 @app.get("/login", response_class=HTMLResponse)
@@ -195,70 +203,90 @@ def home(request: Request, page: int = 1, page_size: int = 4000, pub: str = '1')
                 <strong>Неопубликованные</strong>
             </label>
         </div>
-        <!--ДИАЛОГОВОЕ ОКНО ПОИСКА ДОГОВОРА------------------>
-        <dialog id="dialogwindow" style="widht: 25%; border: 2px solid black;">
-            <p style="color: #1073b7; font-size: 20px; margin: 10px 0px;"><strong>Поиск договора</strong></p>
-            <div style="margin-bottom: 10px;">
-                <label>№ договора(числовой)</label>
-                <input type="text" id="numberdog" placeholder="Введите номер договора">
+        <!-- ДИАЛОГОВОЕ ОКНО ПОИСКА ДОГОВОРА -->
+        <dialog id="dialogwindow" style="width: 450px; border: 2px solid #1073b7; border-radius: 8px; padding: 0;">
+            
+            <div style="background: #1073b7; padding: 10px 15px;">
+                <p style="color: white; font-size: 18px; margin: 0; font-weight: bold;">Поиск договора</p>
             </div>
-            <div style="margin-bottom: 10px;">
-                <label>№ контрагента</label>
-                <input type="text" id="numberkontr" placeholder="Введите номер контрагента">
-            </div>
-            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-                <label>Дата договора</label>
-                <div style="display: flex; gap: 10px;">
-                    <input type="date" id="date_from" placeholder="с">
-                    <span>-</span>
-                    <input type="date" id="date_to" placeholder="по">
+            
+            <div style="padding: 15px;">
+                
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; margin-bottom: 4px;">№ договора (числовой)</label>
+                    <input type="text" id="numberdog" placeholder="Введите номер" style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
                 </div>
-            </div>
-            <div style="display: flex; gap: 7px; margin-top: 5px;">
-                <input type="checkbox" id="publ">
-                <label>Только подлежащие публикации</label>
-            </div>
-            <div style="margin-bottom: 10px; display: flex; gap: 10px;">
-                <label>Привязка файлов</label>
-                <div style="display: flex; gap: 10px;">
-                    <input type="date" id="file_date_from" placeholder="с">
-                    <span>-</span>
-                    <input type="date" id="file_date_to" placeholder="по">
+                
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; margin-bottom: 4px;">№ контрагента</label>
+                    <input type="text" id="numberkontr" placeholder="Введите номер" style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
                 </div>
-            </div>
-            <div style="margin-bottom: 10px; display: flex; gap: 10px;">
-                <label>Сумма договора</label>
-                <div style="display: flex; gap: 10px;">
-                    <input type="text" id="sum_from" placeholder="от" size="10">
-                    <span>-</span>
-                    <input type="text" id="sum_to" placeholder="до" size="10">
+                
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; margin-bottom: 4px;">Дата договора</label>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="date" id="date_from" style="flex: 1; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
+                        <span>—</span>
+                        <input type="date" id="date_to" style="flex: 1; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
+                    </div>
                 </div>
-            </div>
-            <div style="display: flex; gap: 7px; margin-top: 5px;">
-                <label>Подразделение</label>
-                <select id="podr_select" style="width: 100%; padding: 5px;">
-                    {podr_options}
-                </select>
-            </div>
-            <div style="margin-bottom: 10px;">
-                <label>Предмет договора</label>
-                <input type="text" id="pr_dog" placeholder="Введите текст" style="width: 60%; padding: 5px;">
-            </div>
-            <div style="display: flex; gap: 7px; margin-top: 5px;">
-                <input type="checkbox" id="gazsrv">
-                <label>Нижегородоблгаз Сервис</label>
-            </div>
-            <div style="display: flex; gap: 7px; margin-top: 5px;">
-                <input type="checkbox" id="search_archive">
-                <label>Поиск в архиве</label>
-            </div>
-            <div style="gap: 20px;">
-                <button class="button-in-window" onclick="searchdog()">Найти</button>
-                <button class="button-in-window" onclick="goback()">Отмена</button>
+                
+                <div style="margin-bottom: 12px;">
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="publ"> Только подлежащие публикации
+                    </label>
+                </div>
+                
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; margin-bottom: 4px;">Привязка файлов</label>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="date" id="file_date_from" style="flex: 1; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
+                        <span>—</span>
+                        <input type="date" id="file_date_to" style="flex: 1; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; margin-bottom: 4px;">Сумма договора</label>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="sum_from" placeholder="от" style="flex: 1; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
+                        <span>—</span>
+                        <input type="text" id="sum_to" placeholder="до" style="flex: 1; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
+                    </div>
+                </div>
+                
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; margin-bottom: 4px;">Подразделение</label>
+                    <select id="podr_select" style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
+                        {podr_options}
+                    </select>
+                </div>
+                
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; margin-bottom: 4px;">Предмет договора</label>
+                    <input type="text" id="pr_dog" placeholder="Введите текст" style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px;">
+                </div>
+                
+                <div style="margin-bottom: 12px;">
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="gazsrv"> Нижегородоблгаз Сервис
+                    </label>
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <label style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="search_archive"> Поиск в архиве
+                    </label>
+                </div>
+                
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button onclick="goback()" style="background: #6c757d; color: white; border: none; padding: 6px 15px; border-radius: 4px; cursor: pointer;">Отмена</button>
+                    <button onclick="searchdog()" style="background: #1073b7; color: white; border: none; padding: 6px 15px; border-radius: 4px; cursor: pointer;">Найти</button>
+                </div>
+                
             </div>
         </dialog>
-        <!--ЗАКРЫТИЕ ДИАЛОГОВОГО ОКНА ПОИСКА ДОГОВОРА------------------>
-
+        <!-- ЗАКРЫТИЕ ДИАЛОГОВОГО ОКНА ПОИСКА ДОГОВОРА -->
         <table border="1" class="table-columns">
     """
     html += '<table border="1" class="table-columns">'
