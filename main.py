@@ -62,7 +62,6 @@ app.add_middleware(
     https_only=False
 )
 
-
 @app.post("/login")
 async def login_post(request: Request):
     form = await request.form()

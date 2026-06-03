@@ -759,39 +759,55 @@ def get_podr_list(request):
 def get_dogs_ch(request):
     try:
         connection = get_user_connection_ch(request)
-        if not connection: return[]
+        if not connection:
+            return []
 
         user = request.session.get("user")
-        user_id = user.get("id_user_ch") 
-        user_n3, has_access = get_user_access(request, user_id) if user_id else (0, False)
-        if not has_access:
+        user_id = user.get("id_user_ch") if user else None
+
+        if not user_id:
             return []
 
         cursor = connection.cursor()
+
+        cursor.execute("SELECT n1, n2 FROM to_ident WHERE id_user = ?", (user_id,))
+        user_row = cursor.fetchone()
+
+        if not user_row:
+            return []
+
+        user_n1, user_n2 = user_row[0], user_row[1]
+
         sql = """
-            select top 200 to_ch_dog_tab.id_dog, 
-            to_ch_klient.id_klient,
-            to_ch_klient.FIO,
-            to_ch_type_dog.name_type, 
-            to_ch_dog_tab.num_dog_txt, 
-            to_ch_dog_tab.d_dog, 
-            to_ch_dog_tab.saldo_now, 
-            to_ch_status.name_st
-            from to_ch_dog_tab
-            inner join to_ch_type_dog on to_ch_dog_tab.type_dog = to_ch_type_dog.id_type
-            inner join to_ch_status on to_ch_dog_tab.status = to_ch_status.id_status
-            inner join to_ch_klient on to_ch_dog_tab.id_klient = to_ch_klient.id_klient
-            where d_dog <= GETDATE()
+            SELECT top 200 
+                to_ch_dog_tab.id_dog,
+                to_ch_dog_tab.id_klient,
+                to_ch_klient.FIO,
+                to_ch_dog_tab.num_dog_txt,
+                to_ch_type_dog.name_type,
+                to_ch_dog_tab.d_dog,
+                to_ch_dog_tab.saldo_now,
+                to_ch_status.name_st
+            FROM to_ch_dog_tab
+            INNER JOIN to_ch_type_dog ON to_ch_dog_tab.type_dog = to_ch_type_dog.id_type
+            INNER JOIN to_ch_status ON to_ch_dog_tab.status = to_ch_status.id_status
+            INNER JOIN to_ch_klient ON to_ch_dog_tab.id_klient = to_ch_klient.id_klient
+            INNER JOIN to_slu ON to_ch_klient.idr = to_slu.id
+            WHERE to_ch_dog_tab.d_dog <= GETDATE()
         """
         params = []
 
-        if user_n3 != 0:
-            sql += " AND to_ch_klient.n3 = ?"
-            params.append(user_n3)
+        if user_n1 != 0:
+            sql += " AND to_slu.n1new = ?"
+            params.append(user_n1)
+        if user_n2 != 0:
+            sql += " AND to_slu.n11new = ?"
+            params.append(user_n2)
 
         sql += " ORDER BY to_ch_dog_tab.d_dog DESC"
 
         cursor.execute(sql, params)
+
         result = [dict(zip([col[0] for col in cursor.description], row)) for row in cursor.fetchall()]
 
         cursor.close()
@@ -1023,6 +1039,7 @@ def nach_for_dog(request, id_dog: int):
     try:
         connection = get_user_connection_ch(request)
         if not connection: return []
+
         cursor = connection.cursor()
         cursor.execute("""
             select id_dog, 
@@ -1041,9 +1058,11 @@ def nach_for_dog(request, id_dog: int):
         cursor.close()
         connection.close()
         return result
+
     except Exception as e:
         print(f'Error in payment_for_dog:{e}')
         return []
+
 
 def get_podryadchik(request, id_klient: int):
     try:
@@ -1075,50 +1094,61 @@ def get_podryadchik(request, id_klient: int):
         return 'Ошибка'
 
 #актуальное оборудование
-def get_actual_equipment(request, id_dog: str):
+def get_actual_equipment(request, id_klient: str, actual_only: int = 1):
     try:
         connection = get_user_connection_ch(request)
         if not connection:
-            return ''
+            return []
 
         cursor = connection.cursor()
-        cursor.execute("""
-            SELECT STRING_AGG(name_ob, ', ') AS Актуальное_оборудование
-            FROM to_ch_j
-            INNER JOIN to_ch_story ON to_ch_j.id_st = to_ch_story.id_st
-            INNER JOIN to_ch_ob ON to_ch_story.id_ob = to_ch_ob.id_ob
-            INNER JOIN to_ch_dog_tab ON to_ch_j.id_dog = to_ch_dog_tab.id_dog
-            WHERE to_ch_dog_tab.id_dog = ?
-            GROUP BY to_ch_dog_tab.num_dog_txt, to_ch_dog_tab.d_dog
-        """, (id_dog))
 
-        row = cursor.fetchone()
+        sql = """
+            SELECT name_ob, 
+            name_izg,
+            name_model, 
+            kol_oborud, 
+            dol_ob, 
+            du, 
+            do, 
+            id_kl
+            FROM  to_ch_story 
+            inner join to_ch_klient ON to_ch_story.id_obj = to_ch_klient.id_object
+            INNER JOIN to_ch_ob ON to_ch_story.id_ob = to_ch_ob.id_ob 
+            LEFT JOIN vdg_izg on to_ch_story.id_izg = vdg_izg.id_izg
+            LEFT JOIN vdg_model on to_ch_story.id_model = vdg_model.id_model
+            where to_ch_klient.id_klient = ? 
+        """
+        params = [id_klient]
+
+        if actual_only == 1:
+            from datetime import datetime
+            current_year = datetime.now().year
+            sql += " AND (YEAR(du) <= ? AND YEAR(do) >= ?)"
+            params.append(current_year)
+            params.append(current_year)
+
+        sql += " order by du"
+
+        cursor.execute(sql, params)
+
+        columns = [column[0] for column in cursor.description]
+        rows = cursor.fetchall()
+        result = []
+        for row in rows:
+            row_dict = dict(zip(columns, row))
+            if row_dict.get('du'):
+                row_dict['du'] = row_dict['du'].strftime('%Y-%m-%d')
+            if row_dict.get('do'):
+                row_dict['do'] = row_dict['do'].strftime('%Y-%m-%d')
+            result.append(row_dict)
+
         cursor.close()
         connection.close()
-
-        return row[0] if row and row[0] else 'Не указано'
+        return result
 
     except Exception as e:
         print(f'Error in get_actual_equipment: {e}')
-        return 'Ошибка'
-
-"возвращает n3 юзера"
-def get_user_access(request, user_id: int):
-    try:
-        connection = get_user_connection_ch(request)
-        if not connection:
-            return 0, False
-
-        cursor = connection.cursor()
-        cursor.execute("SELECT n3 FROM to_ident WHERE id_user = ?", (user_id,))
-        row = cursor.fetchone()
-        cursor.close()
-        connection.close()
-
-        return (row[0] if row else 0), (row is not None)
-    except Exception as e:
-        print(f'Error in get_user_access: {e}')
-        return 0, False
+        return []
 
 #ищет есть ли юзер в to_ident
 def get_user_id_ch(username: str):
