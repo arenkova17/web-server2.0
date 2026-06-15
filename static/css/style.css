@@ -337,25 +337,6 @@ tr:hover {
 
 /*ВТОРАЯ ЧАСТЬ ПРОГРАММЫ*/
 /*для таблицы на главном экране*/
-.table_ch {
-    width: 100%;
-    margin: 10px;
-    border-collapse: collapse;
-}
-.table_ch th {
-    background-color: #f2f2f2;
-    padding: 12px 10px;
-    border: 1px solid #000000;
-}
-.table_ch td {
-    border: 1px solid #ddd;
-    padding: 10px;
-}
-.table_ch tr:hover {
-    background-color: #f5f5f5;
-    cursor: pointer;
-}
-
 /*ДИАЛОГОВОЕ ОКНО*/
 .dialog_window {
     width: 90%;
@@ -365,14 +346,27 @@ tr:hover {
     padding: 10px
 }
 
-/*ДОГОВОРЫ КЛИЕНТА */
-.table_dogs_for_klient{      /*рамка для таблицы*/
-    max-height: 195px;
-    overflow-y: auto;
-    width: 55%;
+.personal_info {
     border: 1px solid #1073b7;
     padding: 10px;
     border-radius: 8px;
+    width: 95%;
+}
+.personal_info h3 {
+    margin: 0 0 10px 0;
+    color: #0952a0;
+}
+
+
+/*ДОГОВОРЫ КЛИЕНТА */
+.table_dogs_for_klient{      /*рамка для таблицы*/
+    max-height: 230px;
+    overflow-y: auto;
+    width: 96%;
+    border: 1px solid #1073b7;
+    padding: 10px;
+    border-radius: 8px;
+    margin: 0 0 10px 0;
 }
 .table_dogs_for_klient h3 {    /*заголовок*/
     margin: 0px;
@@ -402,17 +396,26 @@ tr:hover {
     width: 60px;
     text-align: center;
 }
+.table_dogs_for_klient th:nth-child(1) { width: 5%; }
+.table_dogs_for_klient th:nth-child(2) { width: 16%; }
+.table_dogs_for_klient th:nth-child(3) { width: 12%; }
+.table_dogs_for_klient th:nth-child(4) { width: 13%; }
+.table_dogs_for_klient th:nth-child(5) { width: 20%; }
+.table_dogs_for_klient th:nth-child(6) { width: 9%; }
+
+
+
+
 
 /*ТАБЛИЦА НАЧИСЛЕНИЯ*/
 .table_nach_tab2{      /*рамка для таблицы*/
     max-height: 200px;
     overflow-y: auto;
-    width: 40%;
+    width: 50%;
     border: 1px solid #1073b7;
     padding: 10px;
     border-radius: 8px;
     margin: 0 0 10px 0;
-
 }
 .table_nach_tab2 h3 {    /*заголовок*/
     margin: 0px;
@@ -432,18 +435,19 @@ tr:hover {
 .table_nach_tab2 td {    /*для ячеек*/
     padding: 5px;
     border: 1px solid #ddd;
+    font-size: 14px;
 }
 
 
-/*таблица в диалоговом окне - история договора*/
+/*ИСТОРИЯ ДОГОВОРА*/
 .table_ch_tab2{      /*рамка для таблицы*/
     max-height: 400px;
     overflow-y: auto;
-    width: 50%;
+    width: 96%;
     border: 1px solid #1073b7;
     padding: 10px;
     border-radius: 8px;
-    margin: 0 0;
+    margin: 10 0;
 }
 .table_ch_tab2 h3 {    /*заголовок*/
     margin: 0px;
@@ -461,6 +465,73 @@ tr:hover {
     padding: 8px;
 }
 .table_ch_tab2 td {    /*для ячеек*/
+    padding: 5px;
+    border: 1px solid #ddd;
+}
+.table_ch_tab2 th:nth-child(1) { width: 10%; }   /* ID договора */
+.table_ch_tab2 th:nth-child(2) { width: 13%; }  /* Дата начала */
+.table_ch_tab2 th:nth-child(3) { width: 13%; }  /* Дата конца */
+.table_ch_tab2 th:nth-child(4) { width: 10%; }  /* s400 */
+.table_ch_tab2 th:nth-child(5) { width: 10%; }  /* s500 */
+.table_ch_tab2 th:nth-child(6) { width: 10%; }  /* s1431 */
+.table_ch_tab2 th:nth-child(7) { width: 10%; }  /* Начальное сальдо */
+
+/*ТАБЛИЦА НАЧИСЛЕНИЯ*/
+.summ_payment {      /*рамка для таблицы*/
+    max-height: 200px;
+    overflow-y: auto;
+    width: 29%;
+    border: 1px solid #1073b7;
+    padding: 10px;
+    border-radius: 8px;
+    margin: 0 0 10px 0;
+}
+.summ_payment h3 {    /*заголовок*/
+    margin: 0px;
+    color: #0952a0;
+    margin-bottom: 5px;
+}
+.summ_payment table{       /*сама таблица*/
+    width: 100%;
+    border-collapse: collapse;
+}
+.summ_payment th{            /*заголовки в таблице*/
+    border: 1px solid #1073b7;
+    background-color: #e4f0fb;
+    font-size: 14px;
+    padding: 8px;
+}
+.summ_payment td {    /*для ячеек*/
+    padding: 5px;
+    border: 1px solid #ddd;
+}
+
+/*ДАТА РАБОТ ВДГО*/
+.data_vdgo {      /*рамка для таблицы*/
+    max-height: 200px;
+    overflow-y: auto;
+    max-width: 30%;
+    border: 1px solid #1073b7;
+    padding: 10px;
+    border-radius: 8px;
+    margin: 0 0 10px 0;
+}
+.data_vdgo h3 {    /*заголовок*/
+    margin: 0px;
+    color: #0952a0;
+    margin-bottom: 5px;
+}
+.data_vdgo table{       /*сама таблица*/
+    width: 100%;
+    border-collapse: collapse;
+}
+.data_vdgo th{            /*заголовки в таблице*/
+    border: 1px solid #1073b7;
+    background-color: #e4f0fb;
+    font-size: 14px;
+    padding: 8px;
+}
+.data_vdgo td {    /*для ячеек*/
     padding: 5px;
     border: 1px solid #ddd;
 }

@@ -134,6 +134,88 @@ def login_page():
     <head>
         <title>Вход в систему</title>
         <link rel="stylesheet" href="/static/css/style.css">
+        <style>
+        
+/*страница ввода логина и пароля - login_page*/
+.login-body {
+    font-family: Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    background: #f0f2f5;
+}
+.login-container {
+    text-align: center;
+    background: white;
+    padding: 40px;
+    border-radius: 10px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.1);
+    width: 350px;
+}
+.login-title {
+    color: #0952a0;
+    margin-bottom: 20px;
+    font-size: 24px;
+}
+.login-input {
+    width: 100%;
+    padding: 10px;
+    margin: 10px 0;
+    box-sizing: border-box;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 14px;
+}
+.password-wrapper {
+    position: relative;
+    width: 100%;
+}
+.login-password {
+    width: 100%;
+    padding: 10px;
+    margin: 10px 0;
+    padding-right: 70px;
+    box-sizing: border-box;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 14px;
+}
+.toggle-password {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    font-size: 12px;
+    background: white;
+    padding: 0 5px;
+    color: #1073b7;
+}
+.login-button {
+    background: #1073b7;
+    color: white;
+    border: none;
+    padding: 12px;
+    width: 100%;
+    cursor: pointer;
+    margin-top: 15px;
+    border-radius: 4px;
+    font-size: 16px;
+    transition: background 0.2s;
+}
+.login-button:hover {
+    background: #0952a0;
+}
+
+.login-error {
+    color: red;
+    margin-top: 15px;
+    text-align: center;
+    font-size: 14px;
+}
+</style>
     </head>
     <body class="login-body">
         <div class="login-container">
