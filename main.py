@@ -3,8 +3,8 @@ import uvicorn  # сервер для запуска питон приложен
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, \
     StreamingResponse  # 1 - отправление html страниц, 2 - перенаправление юзера по разным страницам
 from database import get_clients_page, get_total_count, get_contract_id, update_par, search_dog, get_dog_payments, \
-    verify_windows_login, get_user_otd, add_dog_payment, delete_dog_payments, get_dog_payments1С, get_ds_data, \
-    get_contract_files, get_user_connection, get_podr_list, get_user_id, get_user_id_ch
+    get_user_otd, add_dog_payment, delete_dog_payments, get_dog_payments1С, get_ds_data, \
+    get_contract_files, get_user_connection, get_podr_list, get_user_id, get_user_id_ch, get_user_roles, get_user_connection_ch
 from starlette.middleware.sessions import SessionMiddleware  # созданий сессий, запоминание что пользователь вошел
 from starlette.middleware.base import BaseHTTPMiddleware  # проверка авторизации перед каждым запросом
 import os
@@ -27,6 +27,8 @@ os.environ.pop('all_proxy', None)
 os.environ.pop('ALL_PROXY', None)
 os.environ['NO_PROXY'] = '*'
 os.environ['no_proxy'] = '*'
+
+#os.environ['KRB5CCNAME'] = 'FILE:/home/arenkovaan/mykrb5'
 
 # создание веб-приложения
 app = FastAPI()
@@ -62,14 +64,29 @@ app.add_middleware(
     https_only=False
 )
 
+
+from ldap3 import Server, Connection, ALL, core
+
+def verify_ldap(username, password):
+    try:
+        server = Server('DC1', get_info=ALL)
+        Connection(server, f'{username}@OBLGAZ.NNOV.RU', password, auto_bind=True)
+        print(f"Успешный вход для {username}")
+        return True
+    except core.exceptions.LDAPBindError as e:
+        print(f"LDAP: неверный логин или пароль для {username}: {e}")
+        return False
+    except Exception as e:
+        print(f"LDAP ошибка: {e}")
+        return False
+
 @app.post("/login")
 async def login_post(request: Request):
     form = await request.form()
     username = form.get("username")
     password = form.get("password")
-    remote_host = "gazprosql"
 
-    if verify_windows_login(remote_host, username, password):
+    if verify_ldap(username, password):
         # Для первой программы (tmp_dog)
         otd = get_user_otd(username)
         id_user = get_user_id(username)
@@ -97,6 +114,87 @@ async def login_post(request: Request):
         <head>
             <title>Вход в систему</title>
             <link rel="stylesheet" href="/static/css/style.css">
+            <style>
+                /*страница ввода логина и пароля - login_page*/
+                .login-body {
+                    font-family: Arial, sans-serif;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    height: 100vh;
+                    margin: 0;
+                    background: #f0f2f5;
+                }
+                .login-container {
+                    text-align: center;
+                    background: white;
+                    padding: 40px;
+                    border-radius: 10px;
+                    box-shadow: 0 0 20px rgba(0,0,0,0.1);
+                    width: 350px;
+                }
+                .login-title {
+                    color: #0952a0;
+                    margin-bottom: 20px;
+                    font-size: 24px;
+                }
+                .login-input {
+                    width: 100%;
+                    padding: 10px;
+                    margin: 10px 0;
+                    box-sizing: border-box;
+                    border: 1px solid #ccc;
+                    border-radius: 4px;
+                    font-size: 14px;
+                }
+                .password-wrapper {
+                    position: relative;
+                    width: 100%;
+                }
+                .login-password {
+                    width: 100%;
+                    padding: 10px;
+                    margin: 10px 0;
+                    padding-right: 70px;
+                    box-sizing: border-box;
+                    border: 1px solid #ccc;
+                    border-radius: 4px;
+                    font-size: 14px;
+                }
+                .toggle-password {
+                    position: absolute;
+                    right: 10px;
+                    top: 50%;
+                    transform: translateY(-50%);
+                    cursor: pointer;
+                    font-size: 12px;
+                    background: white;
+                    padding: 0 5px;
+                    color: #1073b7;
+                }
+                .login-button {
+                    background: #1073b7;
+                    color: white;
+                    border: none;
+                    padding: 12px;
+                    width: 100%;
+                    cursor: pointer;
+                    margin-top: 15px;
+                    border-radius: 4px;
+                    font-size: 16px;
+                    transition: background 0.2s;
+                }
+                .login-button:hover {
+                    background: #0952a0;
+                }
+                
+                .login-error {
+                    color: red;
+                    margin-top: 15px;
+                    text-align: center;
+                    font-size: 14px;
+                }
+            </style>
         </head>
         <body class="login-body">
             <div class="login-container">
@@ -2114,15 +2212,76 @@ async def update_azec_ds(request: Request):
         print: (f"Error in save_ds: {e}")
         return {"success": False, "message": str(e)}
 
-
-# страница выбора программы
 @app.get("/choose", response_class=HTMLResponse)
 def choose_page(request: Request):
     user = request.session.get("user")
     if not user:
+        print("DEBUG: Сессия пуста, редирект на /login")
         return RedirectResponse("/login", status_code=303)
 
     username = user.get("login", "Пользователь")
+    print(f"DEBUG: Пользователь: {username}")
+
+    # Роли
+    roles = get_user_roles(request, username)
+    print(f"DEBUG: Роли для {username}: {roles}")
+    is_admin = 'admin' in roles
+    show_receipt = 'cassa' in roles or is_admin
+
+    if is_admin:
+        print(f"DEBUG: {username} — администратор, видит всё")
+        has_dog_ident = True
+        has_to_ident = True
+    else:
+        print(f"DEBUG: {username} — обычный пользователь, проверяем таблицы")
+        has_dog_ident = False
+        has_to_ident = False
+        try:
+            # Проверка в dog_ident (tmp_dog)
+            print("DEBUG: Подключаюсь к БД tmp_dog...")
+            conn = get_user_connection(request)
+            cursor = conn.cursor()
+            print("DEBUG: Подключение к БД tmp_dog успешно")
+            cursor.execute("SELECT COUNT(*) FROM dog_ident WHERE im_user = ?", username)
+            count1 = cursor.fetchone()[0]
+            print(f"DEBUG: dog_ident count = {count1}")
+            if count1 > 0:
+                has_dog_ident = True
+            conn.close()
+            print("DEBUG: Соединение с tmp_dog закрыто")
+
+            # Проверка в to_ident (to_ch_dog)
+            print("DEBUG: Подключаюсь к БД to_ch_dog...")
+            conn_ch = get_user_connection_ch(request)
+            cursor_ch = conn_ch.cursor()
+            print("DEBUG: Подключение к БД to_ch_dog успешно")
+            cursor_ch.execute("SELECT COUNT(*) FROM to_ident WHERE im = ?", username)
+            count2 = cursor_ch.fetchone()[0]
+            print(f"DEBUG: to_ident count = {count2}")
+            if count2 > 0:
+                has_to_ident = True
+            conn_ch.close()
+            print("DEBUG: Соединение с to_ch_dog закрыто")
+
+        except Exception as e:
+            print(f"DEBUG: ❌ Ошибка проверки прав: {e}")
+
+    print(f"DEBUG: ИТОГ: has_dog_ident = {has_dog_ident}, has_to_ident = {has_to_ident}, show_receipt = {show_receipt}")
+
+    # Формируем кнопки
+    buttons_html = ""
+    if has_dog_ident:
+        buttons_html += '<a href="/" class="btn">Расходные договоры и закупки</a>'
+        print("DEBUG: Добавлена кнопка Расходные договоры")
+    if has_to_ident:
+        buttons_html += '<a href="/dogs" class="btn">Просмотр договоров</a>'
+        print("DEBUG: Добавлена кнопка Просмотр договоров")
+    if show_receipt:
+        buttons_html += '<a href="http://192.168.1.120:8080" class="btn" style="background: #28a745;" target="_blank">Печать чеков</a>'
+        print("DEBUG: Добавлена кнопка Печать чеков")
+    if not buttons_html:
+        buttons_html = '<p style="color: #B22222; margin: 0; font-size: 14px;">Для доступа к программам пишите администратору</p>'
+        print("DEBUG: Кнопок нет, выводим сообщение")
 
     html = f"""
     <!DOCTYPE html>
@@ -2136,8 +2295,7 @@ def choose_page(request: Request):
             <h1 class="choose_h1">Выберите программу</h1>
             <div class="welcome">Добро пожаловать, <strong>{username}</strong>!</div>
             <div class="buttons">
-                <a href="/" class="btn">Расходные договоры и закупки</a>
-                <a href="/dogs" class="btn">Просмотр договоров</a>
+                {buttons_html}
             </div>
             <div class="logout">
                 <a href="/logout">Выйти</a>
@@ -2146,8 +2304,8 @@ def choose_page(request: Request):
     </body>
     </html>
     """
+    print("DEBUG: HTML сформирован")
     return HTMLResponse(content=html)
-
 
 if __name__ == '__main__':
     uvicorn.run(

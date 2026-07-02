@@ -1,10 +1,23 @@
+"""
+В этом файле database.py находятся функции с запросами к базе для получения/обновления/авторизации в программе
+20-58 - подключение, авторизация
+подключение к базе
+подключние к tmp_dog
+подключение к to_ch_dog
+функция авторизации
+
+81-776 строки - запросы для модуля Расходные договора и закупки
+770-до конца - запросы для моделя Просмотр договоров с физ.лицами
+"""
+
+
 import pyodbc
 import winrm
 import os
 from datetime import datetime
 
 CONTRACTS_BASE_PATH = os.environ.get('CONTRACTS_PATH', '/mnt/oblgaz/system/contracts_archive')
-pyodbc.pooling = True
+pyodbc.pooling = False
 
 # подключение к бд
 driver = '{ODBC Driver 17 for SQL Server}'
@@ -32,6 +45,19 @@ def get_user_connection_ch(request):
         f'Trusted_Connection=yes;'
     )
     return pyodbc.connect(conn_str)
+
+#выбор ролей для админов и кассы - таблица с ролями админы/касса находится в to_ch_dog.user_roles_aren
+def get_user_roles(request, username):
+    try:
+        conn = get_user_connection_ch(request)
+        cursor = conn.cursor()
+        cursor.execute("SELECT role FROM user_roles_aren WHERE login = ?", username)
+        roles = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        return roles
+    except Exception as e:
+        print(f"Ошибка: {e}")
+        return []
 
 # функция вывода таблицы почастично ( первые 4000 клиентов. вторые 4000 клиентов и тд)
 def get_clients_page(request, page: int = 1, page_size: int = 4000, pub: str = '1'):
@@ -530,33 +556,6 @@ def get_dog_payments1С(request, contract_id: int):
         print(f'Error getting payments: {e}')
         return []
 
-# проверка логина и пароля, выполнение команды на удаленном компе и возвращения true/false в результате, показывая подключилось или нет
-def verify_windows_login(host, username, password):
-    try:
-        # создаем сессию с подключением через winrm с логином и паролем и протоколом ntlm (используется для проверки подлинности пользователей для доступа к ресурсам на windows компе)
-        session = winrm.Session(
-            f'http://{host}:5985/wsman',  # стандартный HTTP порт (5985) для управравления удаленным виндовс компом
-            auth=(username, password),
-            transport='ntlm'  # протокол
-        )
-        # пробуем выполнить команду 'hostname' для проверки - команда получения имени компьютера
-        result = session.run_cmd('hostname')
-
-        # если команда выполнилась без ошибок (код 0), значит аутентификация пройдена
-        if result.status_code == 0:
-            print(f"Успешный вход для {username}")
-            return True
-        else:
-            print(f"Ошибка выполнения команды для {username}: {result.std_err.decode('cp866', errors='ignore')}")
-            return False
-
-    except winrm.exceptions.InvalidCredentialsError:
-        print(f"Неверный логин или пароль для {username}")
-        return False
-    except Exception as e:
-        # ловим любые другие ошибки
-        print(f"Ошибка подключения для {username}: {e}")
-        return False
 
 # функция получения отдела зашедшего пользователя для того чтобы вывести только те договора которые относятся к его отделу
 def get_user_otd(username: str):
@@ -754,7 +753,7 @@ def get_podr_list(request):
         return []
 
 
-#ДЛЯ ВТОРОЙ ЧАСТИ ПРОГРАММЫ
+#ЗАПРОСЫ ДЛЯ ВТОРОГО МОДУЛЯ ПРОГРАММЫ - ПРОСМОТР ДОГОВОРОВ
 #для главной страницы всех договоров
 def get_dogs_ch(request):
     try:
@@ -829,21 +828,16 @@ def get_dog_ch(request, id_dog: int):
             select to_ch_dog_tab.id_dog, 
 			to_ch_klient.id_object as объект,
 			RGK.ls_negr AS РГК,
-			to_ch_kl_els.els AS ЕЛС,
+			ELS.els AS ЕЛС,
             to_ch_type_dog.name_type as типдог, 
             to_ch_dog_tab.d_dog as датадог, 
-            to_ch_dog_tab.saldo_now, 
             to_ch_status.name_st,
             to_ch_klient.FIO as фио, 
             to_ch_klient.telefon as телефон,
-            to_ch_klient.psp_num as номерпаспорта,
-            to_ch_klient.psp_ser as серияпаспорта,
-            to_ch_klient.psp_d as датавыдачи,
-            to_ch_klient.psp_v as кемвыдан,
-            to_ch_klient.d_birth as датарождения,
             to_ch_klient.email as почта, 
             to_ch_klient.id_klient as айди,
             to_ch_addr_object.addr as адрес,
+            to_ch_addr_object.addr_home as адресклиента,
             to_ch_dog_tab.id_klient, 
             to_ch_klient.m_vdgo as месобс,
             to_ch_klient.postob as индекс,
@@ -853,9 +847,9 @@ def get_dog_ch(request, id_dog: int):
             inner join to_ch_status on to_ch_dog_tab.status = to_ch_status.id_status
             inner join to_ch_klient on to_ch_dog_tab.id_klient = to_ch_klient.id_klient 
             inner join to_ch_addr_object on to_ch_klient.id_object = to_ch_addr_object.id_obj 
-			inner join (select MAX(ls_negr) as ls_negr, id_object from vdg_object_negr where valid = 1 group by id_object) RGK on to_ch_klient.id_object = RGK.id_object
-            inner join to_ch_kl_els on to_ch_klient.id_klient = to_ch_kl_els.id_klient
-			where to_ch_dog_tab.id_dog = ? and to_ch_kl_els.no_use = 0
+			left join (select MAX(ls_negr) as ls_negr, id_object from vdg_object_negr where valid = 1 group by id_object) RGK on to_ch_klient.id_object = RGK.id_object
+            left join (select els, id_klient from to_ch_kl_els where no_use = 0) ELS on to_ch_klient.id_klient = ELS.id_klient 
+			where to_ch_dog_tab.id_dog = ?
             order by d_dog desc
         """, id_dog)
         columns = [column[0] for column in cursor.description]
@@ -867,36 +861,6 @@ def get_dog_ch(request, id_dog: int):
     except Exception as e:
         print(f'Error in get_dog_ch: {e}')
         return None
-
-#ИСТОРИЯ ДОГОВОРА
-def get_dog_tab2(request, id_dog: int):
-    try:
-        connection = get_user_connection_ch(request)
-        if not connection: return []
-        cursor = connection.cursor()
-        cursor.execute("""
-            select id_dog, 
-            dat_n, 
-            dat_k, 
-            s400, 
-            s500, 
-            s1431, 
-            sal_n
-            from to_ch_dog_tab2
-            where id_dog = ?
-        """, id_dog)
-        result = []
-        columns = [column[0] for column in cursor.description]
-        rows = cursor.fetchall()
-        for row in rows:
-            row_dict = dict(zip(columns, row))
-            result.append(row_dict)
-        cursor.close()
-        connection.close()
-        return result
-    except Exception as e:
-        print(f'Error in get_dog_tab2:{e}')
-        return []
 
 #ДОГОВОРЫ КЛИЕНТА
 def dogs_for_klient(request, id_klient: int):
@@ -929,138 +893,235 @@ def dogs_for_klient(request, id_klient: int):
         print(f'Error in dogs_for_klient:{e}')
         return []
 
-#ДАТА РАБОТ ВДГО ПО ДОГОВОРУ - после выбора договора
-def obj_for_dog(request, id_klient: int):
+
+#таблица для получания начислений и оплат для ТО+АДО
+def get_tabl_for_TOADO(request, id_dog: int):
     try:
         connection = get_user_connection_ch(request)
         if not connection:
             return []
 
         cursor = connection.cursor()
-        cursor.execute("""
-            select vdg_obj_work.id_object, 
-            date_action
-            from vdg_obj_work
-            inner join to_ch_klient on vdg_obj_work.id_object = to_ch_klient.id_object
-            where type_action = 10 and to_ch_klient.id_klient = ?
-        """, (id_klient))
 
-        result = []
+        cursor.execute("""
+            with base as (
+                select 
+                    to_ch_dog_tab2.id_dog as id_dog,
+                    year(to_ch_dog_tab2.dat_n) as god,
+                    isnull(nach.nach400, 0) as nach400,
+                    isnull(nach.nach1431, 0) as nach1431,
+                    isnull(nach.nach400, 0) + isnull(nach.nach1431, 0) as summanach,
+                    opl.s as s,
+                    opl.dn as dn,
+                    row_number() over (partition by year(to_ch_dog_tab2.dat_n) order by opl.dn) as rn
+                from to_ch_dog_tab2
+                left join (
+                    select 
+                        id_dog, 
+                        god,
+                        sum(case when kod_wrk = 411 then s_nds else 0 end) as nach400,
+                        sum(case when kod_wrk = 1431 then s_nds else 0 end) as nach1431
+                    from to_ch_tabl_nach
+                    group by id_dog, god
+                ) nach on to_ch_dog_tab2.id_dog = nach.id_dog and year(to_ch_dog_tab2.dat_n) = nach.god
+                left join (
+                    select id_dog, dn, s
+                    from to_ch_work
+                ) opl on to_ch_dog_tab2.id_dog = opl.id_dog and year(to_ch_dog_tab2.dat_n) = year(opl.dn)
+                where to_ch_dog_tab2.id_dog = ?
+            )
+            
+            select 
+                cast(id_dog as varchar) as id_dog,
+                cast(god as varchar) as god, 
+                cast(case when rn = 1 then nach400 else null end as varchar) as nach400,
+                cast(case when rn = 1 then nach1431 else null end as varchar) as nach1431,
+                cast(case when rn = 1 then summanach else null end as varchar) as summanach,
+                cast(s as varchar) as s,
+                convert(varchar, dn, 104) as dn,
+                0 as sort_order,
+                case when god = '' then 0 else god end as god_sort
+            from base
+            
+            union all
+            
+            --ИТОГОВАЯ СТРОКА (суммируем только строки с rn = 1)
+            select 
+                'ИТОГО:',
+                '',
+                cast(sum(case when rn = 1 then nach400 else 0 end) as varchar),
+                cast(sum(case when rn = 1 then nach1431 else 0 end) as varchar),
+                cast(sum(case when rn = 1 then summanach else 0 end) as varchar),
+                cast(sum(s) as varchar),
+                cast(sum(case when rn = 1 then summanach else 0 end) - sum(s) as varchar) as saldo,
+                1 as sort_order,
+                0 as god_sort
+            from base
+            
+            order by sort_order, god_sort
+        """, (id_dog))
+
         columns = [column[0] for column in cursor.description]
-        rows = cursor.fetchall()
-        for row in rows:
-            row_dict = dict(zip(columns, row))
-            result.append(row_dict)
+        result = []
+        for row in cursor.fetchall():
+            result.append(dict(zip(columns, row)))
 
         cursor.close()
         connection.close()
         return result
+
     except Exception as e:
-        print(f'Error in obj_for_dog: {e}')
+        print(f'Error in get_tabl_for_TOADO: {e}')
         return []
 
-#ДАТА РАБОТ ВДГО ПО КЛИЕНТУ - для вывода по умолчанию всех работ клиента
-def obj_for_klient(request, id_klient: int):
+
+#ЗАПРОС НА ВЫВОД ТАБЛИЦЫ ВДГО 100%/ФАКТ/(СТАР.)
+def get_tabl_for_VDGO(request, id_dog: int):
     try:
         connection = get_user_connection_ch(request)
-        if not connection: return []
+        if not connection:
+            return []
+
         cursor = connection.cursor()
+
         cursor.execute("""
-            select vdg_obj_work.id_object, 
-            date_action, 
-            id_dog, 
-            to_ch_dog_tab.id_klient 
-            from vdg_obj_work
-            inner join to_ch_klient on vdg_obj_work.id_object = to_ch_klient.id_object
-            inner join to_ch_dog_tab on to_ch_klient.id_klient = to_ch_dog_tab.id_klient
-            where type_action = 10 and to_ch_dog_tab.id_klient = ?
-        """, id_klient)
-        result = []
+            with base as (
+                select 
+                    to_ch_dog_tab2.id_dog, 
+                    convert(varchar, dat_n, 104) + '-' + convert(varchar, dat_k, 104) as period, 
+                    isnull(nach.nach500, 0) as nach500, 
+                    opl.s as opl,
+                    convert(varchar, dn, 104) as dn,
+                    row_number() over (partition by year(to_ch_dog_tab2.dat_n) order by opl.dn) as rn
+                from to_ch_dog_tab2
+                left join (
+                    select 
+                        id_dog, 
+                        god, 
+                        sum(case when kod_wrk = 522 then s_nds else 0 end) as nach500
+                    from to_ch_tabl_nach
+                    group by id_dog, god
+                ) nach on to_ch_dog_tab2.id_dog = nach.id_dog and year(to_ch_dog_tab2.dat_n) = nach.god
+                left join (
+                    select id_dog, dn, s
+                    from to_ch_work
+                ) opl on to_ch_dog_tab2.id_dog = opl.id_dog and year(to_ch_dog_tab2.dat_n) = year(opl.dn)
+                where to_ch_dog_tab2.id_dog = ?
+            )
+            
+            select 
+                cast(id_dog as varchar) as id_dog,
+                period,
+                cast(case when rn = 1 then nach500 else null end as varchar) as nach500,
+                cast(opl as varchar) as opl, 
+                dn,
+                rn
+            from base
+            
+            union all
+            
+            -- ИТОГОВАЯ СТРОКА
+            select 
+                'ИТОГО:',
+                '',
+                cast(sum(case when rn = 1 then nach500 else 0 end) as varchar),
+                cast(sum(opl) as varchar),
+                cast(sum(case when rn = 1 then nach500 else 0 end) - sum(opl) as varchar),
+                ''
+            from base
+        """, (id_dog))
+
         columns = [column[0] for column in cursor.description]
-        rows = cursor.fetchall()
-        for row in rows:
-            row_dict = dict(zip(columns, row))
-            result.append(row_dict)
+        result = []
+        for row in cursor.fetchall():
+            result.append(dict(zip(columns, row)))
+
         cursor.close()
         connection.close()
         return result
+
     except Exception as e:
-        print(f'Error in obj_for_klient:{e}')
+        print(f'Error in get_tabl_for_VDGO: {e}')
         return []
 
-#СУММА ОПЛАТ
-def payment_for_dog(request, id_dog: int):
+#ЗАПРОС НА ВЫВОД ТАБЛИЦЫ ЧАСТНЫЙ СЕКТОР
+def get_tabl_for_CHSEK(request, id_dog: int):
     try:
         connection = get_user_connection_ch(request)
-        if not connection: return []
+        if not connection:
+            return []
+
         cursor = connection.cursor()
+
         cursor.execute("""
+            with base as(
+                select 
+                    to_ch_dog_tab2.id_dog as id_dog, 
+                    CONVERT(varchar, to_ch_dog_tab2.dat_n, 104) + '-' + CONVERT(varchar, to_ch_dog_tab2.dat_k, 104) as period,
+                    nach.nach400 as nach400,
+                    nach.nach1431 as nach1431,
+                    nach.nach500 as nach500, 
+                    nach.nach400 + nach.nach500 + nach.nach1431 as summanach,
+                    opl.s as opl,
+                    convert(varchar, opl.dn, 104) as dn,
+                    row_number() over (partition by year(to_ch_dog_tab2.dat_n) order by opl.dn) as rn
+                from to_ch_dog_tab2 
+                left join (
+                    select 
+                        id_dog, 
+                        god, 
+                        sum(case when kod_wrk in (411,444) then s_nds else 0 end) as nach400,
+                        sum(case when kod_wrk = 1431 then s_nds else 0 end) as nach1431,
+                        sum(case when kod_wrk in (521) then s_nds else 0 end) as nach500
+                    from to_ch_tabl_nach
+                    group by id_dog, god
+                ) nach on to_ch_dog_tab2.id_dog = nach.id_dog and YEAR(to_ch_dog_tab2.dat_n) = nach.god
+                left join (
+                    select id_dog, dn, s from to_ch_work) opl on to_ch_dog_tab2.id_dog = opl.id_dog and year(to_ch_dog_tab2.dat_n) = year(opl.dn)
+                where to_ch_dog_tab2.id_dog = ?)
+            
             select id_dog, 
-            dn, 
-            s
-            from to_ch_work
-            where id_dog = ?
-        """, id_dog)
-        result = []
-        columns = [column[0] for column in cursor.description]
-        rows = cursor.fetchall()
-        for row in rows:
-            row_dict = dict(zip(columns, row))
-            result.append(row_dict)
-        cursor.close()
-        connection.close()
-        return result
-    except Exception as e:
-        print(f'Error in payment_for_dog:{e}')
-        return []
-
-#НАЧИСЛЕНИЯ
-def nach_for_dog(request, id_dog: int):
-    try:
-        connection = get_user_connection_ch(request)
-        if not connection:
-            return []
-
-        cursor = connection.cursor()
-        cursor.execute("""
-            SELECT 
-                god as god,
-                MAX(CASE WHEN m = 1 THEN s ELSE 0 END) as m1,
-                MAX(CASE WHEN m = 2 THEN s ELSE 0 END) as m2,
-                MAX(CASE WHEN m = 3 THEN s ELSE 0 END) as m3,
-                MAX(CASE WHEN m = 4 THEN s ELSE 0 END) as m4,
-                MAX(CASE WHEN m = 5 THEN s ELSE 0 END) as m5,
-                MAX(CASE WHEN m = 6 THEN s ELSE 0 END) as m6,
-                MAX(CASE WHEN m = 7 THEN s ELSE 0 END) as m7,
-                MAX(CASE WHEN m = 8 THEN s ELSE 0 END) as m8,
-                MAX(CASE WHEN m = 9 THEN s ELSE 0 END) as m9,
-                MAX(CASE WHEN m = 10 THEN s ELSE 0 END) as m10,
-                MAX(CASE WHEN m = 11 THEN s ELSE 0 END) as m11,
-                MAX(CASE WHEN m = 12 THEN s ELSE 0 END) as m12
-            FROM to_ch_tabl_nach
-            WHERE id_dog = ?
-            GROUP BY god
-            ORDER BY god DESC
-        """, (id_dog,))
+            period,
+            cast(case when rn = 1 then nach400 else 0 end as varchar) as nach400,
+            cast(case when rn = 1 then nach1431 else 0 end  as varchar) as nach1431,
+            cast(case when rn = 1 then nach500 else 0 end as varchar) as nach500, 
+            cast(case when rn = 1 then summanach else 0 end as varchar) as summanach,
+            cast(opl as varchar) as opl,
+            dn
+            from base 
+            
+            union all 
+            
+            select 
+            'ИТОГО:',
+            '',
+            cast(SUM(case when rn = 1 then nach400 else 0 end) as varchar), 
+            cast(SUM(case when rn = 1 then nach1431 else 0 end) as varchar), 
+            cast(SUM(case when rn = 1 then nach500 else 0 end) as varchar),
+            cast(SUM(case when rn = 1 then summanach else 0 end) as varchar), 
+            cast(SUM(opl) as varchar),
+            cast((sum(case when rn = 1 then summanach else 0 end) - sum(opl)) as varchar) as saldo
+            from base
+        """, (id_dog))
 
         columns = [column[0] for column in cursor.description]
-        rows = cursor.fetchall()
         result = []
-        for row in rows:
-            row_dict = dict(zip(columns, row))
-            result.append(row_dict)
+        for row in cursor.fetchall():
+            result.append(dict(zip(columns, row)))
 
         cursor.close()
         connection.close()
         return result
 
     except Exception as e:
-        print(f'Error in nach_for_dog: {e}')
+        print(f'Error in get_tabl_for_VDGO: {e}')
         return []
+
+
 
 #ВЫВОД РЕЗУЛЬТАТОВ ПОСЛЕ ПОИСКА
-def search_dog_ch(request, idklient: str = "", iddog: str = "", numdog: str = "", fio: str = "", street: str = "",
-                  house: str = "", flat: str = ""):
+def search_dog_ch(request, idklient: str = "", iddog: str = "", numdog: str = "", fio: str = "", town: str = "", street: str = "",
+                  house: str = "", flat: str = "", els: str = ""):
     try:
         connection = get_user_connection_ch(request)
         if not connection:
@@ -1081,6 +1142,7 @@ def search_dog_ch(request, idklient: str = "", iddog: str = "", numdog: str = ""
             inner join to_ch_status on to_ch_dog_tab.status = to_ch_status.id_status
             inner join to_ch_klient on to_ch_dog_tab.id_klient = to_ch_klient.id_klient
             inner join to_ch_addr_object on to_ch_klient.id_object = to_ch_addr_object.id_obj 
+            left join to_ch_kl_els on to_ch_klient.id_klient = to_ch_kl_els.id_klient
             where 1=1 and d_dog <= GETDATE()
         """
         params = []
@@ -1095,17 +1157,29 @@ def search_dog_ch(request, idklient: str = "", iddog: str = "", numdog: str = ""
             sql += " AND to_ch_dog_tab.num_dog_txt LIKE ?"
             params.append(f'%{numdog}%')
         if fio:
-            sql += " AND to_ch_klient.FIO LIKE ?"
-            params.append(f'%{fio}%')
+            fio = fio.strip()
+            sql += " AND LOWER(to_ch_klient.FIO) LIKE ?"
+            params.append(f'%{fio.lower()}%')
+        if town:
+            town = town.strip()
+            sql += " AND LOWER(to_ch_addr_object.addr) LIKE ?"
+            params.append(f'%{town.lower()}%')
         if street:
-            sql += " AND to_ch_addr_object.addr LIKE ?"
-            params.append(f'%{street}%')
+            street = street.strip()
+            sql += " AND LOWER(to_ch_addr_object.addr) LIKE ?"
+            params.append(f'%{street.lower()}%')
         if house:
+            house = house.strip()
             sql += " AND to_ch_addr_object.addr LIKE ?"
-            params.append(f'%{house}%')
+            params.append(f'%{house.lower()}%')
         if flat:
+            flat = flat.strip()
             sql += " AND to_ch_addr_object.addr LIKE ?"
-            params.append(f'%{flat}%')
+            params.append(f'%{flat.lower()}%')
+        if els:
+            sql += " AND to_ch_kl_els.els LIKE ?"
+            params.append(f'%{els}%')
+
 
         cursor.execute(sql, params)
 
@@ -1122,6 +1196,9 @@ def search_dog_ch(request, idklient: str = "", iddog: str = "", numdog: str = ""
         print(f'Error in search_dog_ch: {e}')
         return []
 
+
+
+#ПОДРЯДЧИК
 def get_podryadchik(request, id_klient: int):
     try:
         connection = get_user_connection_ch(request)
@@ -1130,28 +1207,24 @@ def get_podryadchik(request, id_klient: int):
 
         cursor = connection.cursor()
         cursor.execute("""
-            SELECT ISNULL(t.n_podr, '') AS n_podr
-            FROM (
-                SELECT vdg_home_podr.id_home, vdg_podryad.name_org AS n_podr, valid, active
-                FROM vdg_home_podr 
-                LEFT OUTER JOIN vdg_podryad ON vdg_home_podr.id_podr = vdg_podryad.id_p
-                WHERE valid = 1 AND active = 1 AND vdg_home_podr.god = YEAR(GETDATE())
-            ) AS t 
-            RIGHT OUTER JOIN to_ch_klient ON t.id_home = to_ch_klient.id_home 
-            WHERE to_ch_klient.id_klient = ?
+          select name_org
+          from vdg_podryad
+          inner join vdg_home_podr on vdg_podryad.id_p = vdg_home_podr.id_podr
+          inner join to_ch_klient on vdg_home_podr.id_home = to_ch_klient.id_home
+          where id_klient = ? and vdg_home_podr.god = YEAR(GETDATE()) and valid = 1 AND active = 1
         """, (id_klient,))
 
         row = cursor.fetchone()
         cursor.close()
         connection.close()
 
-        return row[0] if row and row[0] else 'Не указан'
+        return row[0] if row and row[0] else 'Нет'
 
     except Exception as e:
         print(f'Error in get_podryadchik: {e}')
         return 'Ошибка'
 
-#актуальное оборудование
+#АКТУАЛЬНОЕ ОБОРУДОВНАИЕ
 def get_actual_equipment(request, id_klient: str, actual_only: int = 1):
     try:
         connection = get_user_connection_ch(request)
@@ -1162,20 +1235,21 @@ def get_actual_equipment(request, id_klient: str, actual_only: int = 1):
 
         sql = """
             SELECT name_ob, 
-            name_izg,
-            name_model, 
-            kol_oborud, 
-            dol_ob, 
-            du, 
-            do, 
-            id_kl,
-            to_ch_ob.id_ob
-            FROM  to_ch_story 
-            inner join to_ch_klient ON to_ch_story.id_obj = to_ch_klient.id_object
+                name_izg,
+                name_model, 
+                kol_oborud, 
+                dol_ob, 
+                du, 
+                do, 
+                id_kl,
+                to_ch_ob.id_ob
+            FROM to_ch_story 
+            INNER JOIN to_ch_klient ON to_ch_story.id_obj = to_ch_klient.id_object
             INNER JOIN to_ch_ob ON to_ch_story.id_ob = to_ch_ob.id_ob 
-            LEFT JOIN vdg_izg on to_ch_story.id_izg = vdg_izg.id_izg
-            LEFT JOIN vdg_model on to_ch_story.id_model = vdg_model.id_model
-            where to_ch_klient.id_klient = ? 
+            LEFT JOIN vdg_izg ON to_ch_story.id_izg = vdg_izg.id_izg
+            LEFT JOIN vdg_model ON to_ch_story.id_model = vdg_model.id_model
+            WHERE to_ch_klient.id_klient = ?
+                AND name_ob NOT LIKE '(МОП)%'
         """
         params = [id_klient]
 
@@ -1223,61 +1297,49 @@ def get_user_id_ch(username: str):
         print(f'Error in get_user_id_ch: {e}')
         return None
 
-
-def get_actual_equipment_by_year(request, id_klient: str, year: str = None):
+#ДАТА ОБСЛУЖИВАНИЯ ВДГО ПО ДОГОВОРУ
+def obj_for_dog(request, id_dog: int):
     try:
         connection = get_user_connection_ch(request)
         if not connection:
             return []
 
         cursor = connection.cursor()
+        cursor.execute("""
+            select distinct 
+                to_ch_klient.id_klient,
+                to_ch_klient.FIO,
+                to_ch_klient.id_object,
+                to_ch_dog_tab.id_dog,
+                vdg_obj_work.date_action
+            from vdg_obj_work
+            inner join to_ch_klient on vdg_obj_work.id_object = to_ch_klient.id_object
+            inner join to_ch_dog_tab on to_ch_klient.id_klient = to_ch_dog_tab.id_klient
+            where to_ch_dog_tab.id_dog = ?
+                and vdg_obj_work.type_action = 10
+                and exists (
+                    select 1
+                    from to_ch_tabl_nach
+                    where to_ch_tabl_nach.id_dog = to_ch_dog_tab.id_dog
+                )
+        """, (id_dog))
 
-        sql = """
-            SELECT name_ob, 
-            name_izg,
-            name_model, 
-            kol_oborud, 
-            dol_ob, 
-            du, 
-            do, 
-            to_ch_klient.id_klient as id_kl,
-            to_ch_ob.id_ob as id_ob
-            FROM to_ch_story 
-            inner join to_ch_klient ON to_ch_story.id_obj = to_ch_klient.id_object
-            INNER JOIN to_ch_ob ON to_ch_story.id_ob = to_ch_ob.id_ob 
-            LEFT JOIN vdg_izg on to_ch_story.id_izg = vdg_izg.id_izg
-            LEFT JOIN vdg_model on to_ch_story.id_model = vdg_model.id_model
-            where to_ch_klient.id_klient = ? 
-        """
-        params = [id_klient]
-
-        # Фильтр по году
-        if year and year != 'None' and year != 'null':
-            sql += " AND YEAR(du) <= ? AND YEAR(do) >= ?"
-            params.append(year)
-            params.append(year)
-
-        sql += " order by do"
-
-        cursor.execute(sql, params)
-
+        result = []
         columns = [column[0] for column in cursor.description]
         rows = cursor.fetchall()
-        result = []
         for row in rows:
             row_dict = dict(zip(columns, row))
-            if row_dict.get('du'):
-                row_dict['du'] = row_dict['du'].strftime('%Y-%m-%d')
-            if row_dict.get('do'):
-                row_dict['do'] = row_dict['do'].strftime('%Y-%m-%d')
             result.append(row_dict)
 
         cursor.close()
         connection.close()
         return result
-
     except Exception as e:
-        print(f'Error in get_actual_equipment_by_year: {e}')
+        print(f'Error in obj_for_dog: {e}')
         return []
+
+
+
+
 
 
